@@ -374,156 +374,279 @@ interface LogicFlowViewerProps {
    - diff 기반 하이라이트 지원
 ```
 
-### 2. 이상 징후 자동 감지 + 알림
+#### 1.2 보강 설계: 다층 시각화 시스템
 
-시스템이 감지하고, User에게 알림:
-
-| 감지 항목 | 알림 예시 |
-|----------|----------|
-| 중복 코드 | "'삭제' 함수가 2개 감지됨" |
-| 연결 끊김 | "'확인 버튼'이 '삭제 실행'과 연결 안됨" |
-| 인터페이스 불일치 | "A함수: projectId(숫자), B함수: project_id(문자)" |
-| 이전 버전과 다름 | "이전 버전과 다른 로직 감지" |
-
-#### 2.1 상세 설계: 이상 징후 감지 시스템
-
-##### API 설계
+##### 뷰 레벨 계층
 
 ```
-POST /api/anomaly/scan
+┌─────────────────────────────────────────────────────────┐
+│  Level 1: 프로젝트 개요 (Project Overview)               │
+│  ┌─────┐ ┌─────┐ ┌─────┐ ┌─────┐                       │
+│  │auth │ │api  │ │utils│ │ ... │  ← 모듈 박스          │
+│  └─────┘ └─────┘ └─────┘ └─────┘                       │
+├─────────────────────────────────────────────────────────┤
+│  Level 2: 모듈 상세 (Module Detail)     [클릭 시 확대]  │
+│  ┌───────────────────────────────────┐                  │
+│  │ auth/                             │                  │
+│  │  ├── login()    ──→ validate()   │                  │
+│  │  ├── logout()                     │                  │
+│  │  └── refresh()  ──→ checkToken() │                  │
+│  └───────────────────────────────────┘                  │
+├─────────────────────────────────────────────────────────┤
+│  Level 3: 함수 흐름 (Function Flow)     [클릭 시 확대]  │
+│                                                         │
+│  [시작] → [검증] → {조건} →|성공| → [처리] → [완료]     │
+│                     |실패| → [에러]                     │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
 ```
 
-**Request:**
+##### 뷰 레벨 API
+
+```
+GET /api/logic-flow/overview?repo=owner/repo
+GET /api/logic-flow/module?repo=owner/repo&module=auth
+GET /api/logic-flow/function?repo=owner/repo&path=src/auth/login.ts&function=handleLogin
+```
+
+**Level 1 Response (프로젝트 개요):**
 ```json
 {
-  "repo": "owner/repo-name",
-  "scan_type": "full" | "incremental",
-  "base_commit": "abc123",      // incremental일 때 비교 기준
-  "target_paths": ["src/"]      // 스캔 범위 (선택)
+  "level": "project",
+  "modules": [
+    {
+      "name": "auth",
+      "path": "src/auth/",
+      "status": "error",
+      "issue_count": 2,
+      "function_count": 5
+    },
+    {
+      "name": "api",
+      "path": "src/api/",
+      "status": "normal",
+      "issue_count": 0,
+      "function_count": 12
+    }
+  ],
+  "mermaid_code": "block-beta\n  columns 4\n  auth[\"auth 🔴\"] api[\"api\"] utils[\"utils\"] ..."
 }
 ```
 
-**Response:**
-```json
+##### 인터랙티브 기능
+
+| 기능 | 동작 | 결과 |
+|------|------|------|
+| **클릭** | 노드 클릭 | 해당 레벨로 드릴다운 / 코드 위치 표시 |
+| **호버** | 노드 위에 마우스 | 툴팁 (함수 설명, 파라미터, 에러 정보) |
+| **우클릭** | 컨텍스트 메뉴 | "코드 보기", "AI에게 설명 요청", "이슈 생성" |
+| **줌** | 스크롤 / 핀치 | 확대/축소 |
+| **패닝** | 드래그 | 다이어그램 이동 |
+| **검색** | Ctrl+F | 노드/함수명 검색 + 하이라이트 |
+
+##### 스텝바이스텝 실행 모드
+
+비개발자가 "코드가 어떤 순서로 실행되는지" 애니메이션으로 이해:
+
+```typescript
+interface StepByStepConfig {
+  speed: 'slow' | 'normal' | 'fast';  // 애니메이션 속도
+  autoPlay: boolean;                   // 자동 재생
+  showDataFlow: boolean;               // 데이터 흐름 표시
+  highlightCurrent: boolean;           // 현재 단계 강조
+}
+```
+
+**UI 컨트롤:**
+```
+┌─────────────────────────────────────────┐
+│  ⏮️  ◀️  ⏸️  ▶️  ⏭️   [1/5 단계]  🐢━━●━━🐇  │
+│                                         │
+│  ┌─────────────────────────────────┐   │
+│  │  ▶ 현재: "사용자 입력 검증"      │   │
+│  │    다음: "서버에 로그인 요청"    │   │
+│  └─────────────────────────────────┘   │
+└─────────────────────────────────────────┘
+```
+
+**API:**
+```
+POST /api/logic-flow/trace
 {
-  "scan_id": "scan_xyz",
-  "anomalies": [
-    {
-      "type": "duplicate",
-      "severity": "warning",
-      "title": "'삭제' 함수가 2개 감지됨",
-      "description": "동일한 기능을 하는 함수가 2곳에 존재합니다",
-      "locations": [
-        { "file": "src/utils/delete.ts", "line": 15, "function": "deleteItem" },
-        { "file": "src/api/remove.ts", "line": 42, "function": "removeItem" }
-      ],
-      "suggestion": "하나로 통합하고 다른 곳에서 import하세요",
-      "auto_fixable": false
-    },
-    {
-      "type": "interface_mismatch",
-      "severity": "error",
-      "title": "파라미터 타입 불일치",
-      "description": "같은 데이터를 다른 형식으로 전달하고 있습니다",
-      "locations": [
-        { "file": "src/api/project.ts", "param": "projectId", "type": "number" },
-        { "file": "src/utils/helper.ts", "param": "project_id", "type": "string" }
-      ],
-      "suggestion": "projectId(숫자)로 통일하세요",
-      "auto_fixable": true
-    }
+  "repo": "owner/repo",
+  "function": "handleLogin",
+  "input_example": { "id": "user@email.com", "pw": "***" }
+}
+
+Response:
+{
+  "steps": [
+    { "order": 1, "node": "A", "label": "로그인 버튼 클릭", "data": null },
+    { "order": 2, "node": "B", "label": "입력값 검증", "data": { "id": "user@..." } },
+    { "order": 3, "node": "C", "label": "서버 요청", "data": { "endpoint": "/api/auth" } },
+    { "order": 4, "node": "D", "label": "응답 처리", "data": { "status": 200 } },
+    { "order": 5, "node": "E", "label": "로그인 완료", "data": { "redirect": "/" } }
   ],
-  "summary": {
-    "total": 5,
-    "errors": 1,
-    "warnings": 3,
-    "info": 1
+  "total_time_ms": 1234
+}
+```
+
+##### 에러 트레이스 시각화
+
+에러 발생 시 "어디서 문제가 생겼는지" 경로 표시:
+
+```
+정상 흐름:     A → B → C → D → E (초록)
+에러 흐름:     A → B → C ─╳─→ ERROR (빨강)
+                         │
+                    "토큰 만료"
+```
+
+**API:**
+```
+POST /api/logic-flow/error-trace
+{
+  "repo": "owner/repo",
+  "error": {
+    "message": "Token expired",
+    "stack": "at validateToken (auth.ts:42)..."
+  }
+}
+
+Response:
+{
+  "error_path": ["A", "B", "C"],
+  "error_node": "C",
+  "error_detail": {
+    "location": "토큰 검증 단계",
+    "cause": "토큰 유효기간 만료",
+    "suggestion": "재로그인 또는 토큰 갱신"
+  },
+  "mermaid_code": "flowchart TB\n  A[시작]-->B[입력]-->C[검증]:::error\n  classDef error fill:#dc2626"
+}
+```
+
+##### 버전 비교 (Before/After)
+
+AI 수정 전후 로직 변화를 나란히 표시:
+
+```
+┌─────────────────────┬─────────────────────┐
+│  수정 전 (Before)    │  수정 후 (After)     │
+├─────────────────────┼─────────────────────┤
+│  A → B → C          │  A → B → B' → C     │
+│       │             │       │    │        │
+│       ▼             │       ▼    ▼        │
+│  [에러 발생]         │  [검증 추가] → OK   │
+└─────────────────────┴─────────────────────┘
+
+변경 요약: "토큰 만료 검증 단계(B') 추가"
+```
+
+**API:**
+```
+POST /api/logic-flow/compare
+{
+  "repo": "owner/repo",
+  "path": "src/auth/login.ts",
+  "base_commit": "abc123",
+  "head_commit": "def456"
+}
+```
+
+##### 코드-다이어그램 동기화
+
+다이어그램 노드 클릭 시 해당 코드 하이라이트:
+
+```typescript
+interface CodeDiagramSync {
+  // 노드 클릭 → 코드 스크롤
+  onNodeClick: (node: FlowNode) => {
+    codeEditor.scrollTo(node.source_location.line);
+    codeEditor.highlight(node.source_location.line, node.source_location.endLine);
+  };
+
+  // 코드 선택 → 노드 하이라이트
+  onCodeSelect: (startLine: number, endLine: number) => {
+    const node = findNodeByLineRange(startLine, endLine);
+    diagram.highlightNode(node.id);
+  };
+}
+```
+
+**UI 레이아웃:**
+```
+┌────────────────────────────────────────────────────┐
+│  [다이어그램]              │  [코드 뷰어]          │
+│                           │                       │
+│   A ──→ B ──→ C           │  function login() {   │
+│         ▲                 │    validate(); // ←── │
+│      [클릭]               │    request();         │
+│                           │  }                    │
+└────────────────────────────────────────────────────┘
+```
+
+##### AI 설명 통합
+
+각 노드에 대해 AI가 비개발자 언어로 설명:
+
+```
+POST /api/logic-flow/explain
+{
+  "repo": "owner/repo",
+  "node_id": "B",
+  "context": "login flow"
+}
+
+Response:
+{
+  "node_id": "B",
+  "explanation": {
+    "what": "사용자가 입력한 이메일과 비밀번호가 올바른 형식인지 확인합니다",
+    "why": "잘못된 형식의 데이터가 서버로 전송되면 오류가 발생하기 때문입니다",
+    "example": "예: 이메일에 @ 기호가 없으면 '올바른 이메일 형식이 아닙니다' 메시지가 표시됩니다"
   }
 }
 ```
 
-##### 이상 징후 타입 정의
-
-| type | 심각도 | 설명 | 자동 수정 |
-|------|--------|------|----------|
-| `duplicate` | warning | 중복 코드/함수 | ❌ (사용자 결정 필요) |
-| `interface_mismatch` | error | 타입/이름 불일치 | ✅ 가능 |
-| `disconnected` | warning | 호출되지 않는 코드 | ❌ |
-| `logic_change` | info | 이전 버전과 로직 변경 | ❌ |
-| `missing_error_handling` | warning | 에러 처리 누락 | ✅ 가능 |
-
-##### 감지 알고리즘
-
-```mermaid
-flowchart TB
-    subgraph Input["입력"]
-        Code["코드 변경사항"]
-        History["이전 버전"]
-    end
-
-    subgraph Analysis["분석"]
-        AST["AST 파싱"]
-        Similarity["유사도 분석"]
-        TypeCheck["타입 체크"]
-        CallGraph["호출 그래프"]
-    end
-
-    subgraph Detection["감지"]
-        D1["중복 감지<br/>(유사도 > 80%)"]
-        D2["불일치 감지<br/>(타입/이름)"]
-        D3["연결 끊김<br/>(미사용 코드)"]
-        D4["로직 변경<br/>(diff 분석)"]
-    end
-
-    subgraph Output["출력"]
-        Alert["알림 생성"]
-        Suggestion["해결책 제안"]
-    end
-
-    Code --> AST
-    History --> AST
-    AST --> Similarity --> D1
-    AST --> TypeCheck --> D2
-    AST --> CallGraph --> D3
-    Code --> D4
-
-    D1 --> Alert
-    D2 --> Alert
-    D3 --> Alert
-    D4 --> Alert
-    Alert --> Suggestion
-```
-
-##### 실시간 알림 (SSE)
-
-```typescript
-// 프론트엔드에서 실시간 알림 수신
-const eventSource = new EventSource('/api/anomaly/stream?repo=owner/repo');
-
-eventSource.onmessage = (event) => {
-  const anomaly = JSON.parse(event.data);
-  // 토스트 알림 표시
-  showToast({
-    type: anomaly.severity,
-    title: anomaly.title,
-    action: () => navigateToLocation(anomaly.locations[0])
-  });
-};
-```
-
-##### UI 컴포넌트
+##### 확장 컴포넌트 구조
 
 ```
-src/components/anomaly/
-├── AnomalyPanel.tsx         # 이상 징후 목록 패널
-├── AnomalyCard.tsx          # 개별 이상 징후 카드
-├── AnomalyToast.tsx         # 실시간 알림 토스트
-├── SeverityBadge.tsx        # 심각도 뱃지 (error/warning/info)
+src/components/logic-flow/
+├── LogicFlowViewer.tsx        # 메인 뷰어
+├── MermaidRenderer.tsx        # 다이어그램 렌더링
+├── NodeTooltip.tsx            # 호버 툴팁
+├── FlowControls.tsx           # 줌/패닝 컨트롤
+├── StepPlayer.tsx             # 스텝바이스텝 플레이어 ⭐NEW
+├── ErrorTrace.tsx             # 에러 경로 표시 ⭐NEW
+├── VersionCompare.tsx         # Before/After 비교 ⭐NEW
+├── CodeSync.tsx               # 코드-다이어그램 동기화 ⭐NEW
+├── AIExplainer.tsx            # AI 설명 패널 ⭐NEW
+├── LevelNavigator.tsx         # 레벨 전환 네비게이터 ⭐NEW
 └── hooks/
-    └── useAnomalyStream.ts  # SSE 연결 + 상태 관리
+    ├── useLogicFlow.ts        # API 호출
+    ├── useStepPlayer.ts       # 스텝 재생 상태 ⭐NEW
+    └── useCodeSync.ts         # 코드 동기화 ⭐NEW
 ```
 
-### 3. 비개발자 언어로 오류 설명
+##### 성능 최적화
+
+| 전략 | 구현 |
+|------|------|
+| **지연 로딩** | Level 2-3은 클릭 시 로드 |
+| **가상화** | 대규모 다이어그램은 뷰포트 내 노드만 렌더링 |
+| **웹워커** | Mermaid 파싱을 별도 스레드에서 처리 |
+| **캐싱** | IndexedDB에 다이어그램 캐시 (오프라인 지원) |
+
+### ~~2. 이상 징후 자동 감지 + 알림~~ (폐기)
+
+> **폐기 사유**: 복잡도 대비 사용자 가치 낮음. 시각화 기능에 집중.
+>
+> 핵심 기능은 "코드 로직 시각화"로 통합:
+> - 에러 발생 시 → 에러 지점 하이라이트로 대체
+> - 로직 변경 감지 → 버전 비교 다이어그램으로 대체
+
+### 2. 비개발자 언어로 오류 설명
 
 ```
 기술적 설명 (이해 불가)
@@ -1345,23 +1468,21 @@ timeline
     title DevFlow 개발 로드맵
     section Phase 1: MVP
         PRD 입력 : AI 개발 : 미리보기
-    section Phase 2: 감지
-        이상 징후 탐지 : 알림 시스템
-    section Phase 3: 시각화
-        코드→논리 변환 : Mermaid 통합
-    section Phase 4: 안정화
+    section Phase 2: 시각화 ⭐핵심
+        다층 뷰 시스템 : 스텝바이스텝 : 에러 트레이스 : AI 설명
+    section Phase 3: 안정화
         E2E 테스트 : 피드백 반영
-    section Phase 5: 공개 배포
+    section Phase 4: 공개 배포
         GitHub OAuth : Vercel 배포 : 멀티테넌시
 ```
 
 | Phase | 목표 | 상태 |
 |-------|------|------|
 | **1. MVP** | PRD 입력 → AI 개발 → 미리보기 | ✅ 완료 |
-| **2. 감지 시스템** | 이상 징후 자동 감지 + 알림 | 🔄 진행중 |
-| **3. 시각화** | 코드 → 논리 흐름 변환 (Mermaid) | 🔄 진행중 |
-| **4. 안정화** | E2E 테스트 + 피드백 반영 | ✅ 완료 |
-| **5. 공개 배포** | GitHub OAuth + Vercel + 멀티테넌시 | 🆕 신규 |
+| ~~**2. 감지 시스템**~~ | ~~이상 징후 자동 감지 + 알림~~ | ❌ 폐기 |
+| **2. 시각화** ⭐ | 다층 뷰 + 스텝바이스텝 + 에러 트레이스 + AI 설명 | 📋 설계완료 |
+| **3. 안정화** | E2E 테스트 + 피드백 반영 | ✅ 완료 |
+| **4. 공개 배포** | GitHub OAuth + Vercel + 멀티테넌시 | 🔄 90% |
 
 ---
 
