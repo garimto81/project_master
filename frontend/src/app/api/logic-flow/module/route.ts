@@ -6,7 +6,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/auth'
+import { getGitHubTokenFromSession } from '@/lib/auth'
 
 interface FunctionInfo {
   name: string
@@ -29,19 +29,38 @@ interface ModuleResponse {
   }
 }
 
-export async function GET(request: NextRequest) {
-  // 인증 확인
-  const auth = await requireAuth()
-  if ('error' in auth) {
-    return NextResponse.json({ error: auth.error }, { status: auth.status })
+// 폴백 응답 생성
+function createFallbackResponse(repo: string, moduleName: string): ModuleResponse {
+  return {
+    level: 'module',
+    repo,
+    module: moduleName,
+    functions: [
+      { name: 'main', type: 'function', calls: ['helper'], status: 'normal', line_start: 1, line_end: 20 },
+      { name: 'helper', type: 'function', calls: [], status: 'normal', line_start: 22, line_end: 35 },
+    ],
+    mermaid_code: `flowchart LR
+  F0["⚙️ main"]
+  F1["⚙️ helper"]
+  F0 --> F1`,
+    summary: { total_functions: 2, error_functions: 0 },
   }
+}
 
+export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const repo = searchParams.get('repo')
   const moduleName = searchParams.get('module')
 
   if (!repo || !moduleName) {
     return NextResponse.json({ error: 'repo and module parameters required' }, { status: 400 })
+  }
+
+  // 인증 확인 (선택적 - 없으면 폴백 데이터 반환)
+  const { token } = await getGitHubTokenFromSession()
+
+  if (!token) {
+    return NextResponse.json(createFallbackResponse(repo, moduleName))
   }
 
   try {
@@ -53,7 +72,7 @@ export async function GET(request: NextRequest) {
       `https://api.github.com/repos/${owner}/${repoName}/contents/${modulePath}`,
       {
         headers: {
-          'Authorization': `Bearer ${auth.token}`,
+          'Authorization': `Bearer ${token}`,
           'Accept': 'application/vnd.github.v3+json',
         },
       }
@@ -162,21 +181,6 @@ export async function GET(request: NextRequest) {
 
   } catch (error) {
     console.error('Module detail error:', error)
-
-    // 폴백 데이터
-    return NextResponse.json({
-      level: 'module',
-      repo,
-      module: moduleName,
-      functions: [
-        { name: 'main', type: 'function', calls: ['helper'], status: 'normal', line_start: 1, line_end: 20 },
-        { name: 'helper', type: 'function', calls: [], status: 'normal', line_start: 22, line_end: 35 },
-      ],
-      mermaid_code: `flowchart LR
-  F0["⚙️ main"]
-  F1["⚙️ helper"]
-  F0 --> F1`,
-      summary: { total_functions: 2, error_functions: 0 },
-    })
+    return NextResponse.json(createFallbackResponse(repo, moduleName))
   }
 }

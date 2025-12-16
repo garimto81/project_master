@@ -6,7 +6,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/auth'
+import { getGitHubTokenFromSession } from '@/lib/auth'
 
 interface Module {
   name: string
@@ -28,18 +28,47 @@ interface OverviewResponse {
   }
 }
 
-export async function GET(request: NextRequest) {
-  // 인증 확인
-  const auth = await requireAuth()
-  if ('error' in auth) {
-    return NextResponse.json({ error: auth.error }, { status: auth.status })
-  }
+// 폴백 응답 생성 (인증 없거나 API 실패 시)
+function createFallbackResponse(repo: string): OverviewResponse {
+  const fallbackModules: Module[] = [
+    { name: 'auth', path: 'src/auth/', status: 'normal', issue_count: 0, function_count: 5 },
+    { name: 'api', path: 'src/api/', status: 'normal', issue_count: 0, function_count: 10 },
+    { name: 'components', path: 'src/components/', status: 'normal', issue_count: 0, function_count: 8 },
+    { name: 'lib', path: 'src/lib/', status: 'normal', issue_count: 0, function_count: 4 },
+  ]
 
+  return {
+    level: 'project',
+    repo,
+    modules: fallbackModules,
+    mermaid_code: `block-beta
+  columns 4
+  auth["auth"]
+  api["api"]
+  components["components"]
+  lib["lib"]`,
+    summary: {
+      total_modules: 4,
+      error_modules: 0,
+      total_issues: 0,
+    },
+  }
+}
+
+export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const repo = searchParams.get('repo')
 
   if (!repo) {
     return NextResponse.json({ error: 'repo parameter required' }, { status: 400 })
+  }
+
+  // 인증 확인 (선택적 - 없으면 폴백 데이터 반환)
+  const { token } = await getGitHubTokenFromSession()
+
+  // 인증 없으면 즉시 폴백 데이터 반환
+  if (!token) {
+    return NextResponse.json(createFallbackResponse(repo))
   }
 
   try {
@@ -51,7 +80,7 @@ export async function GET(request: NextRequest) {
       `https://api.github.com/repos/${owner}/${repoName}/git/trees/main?recursive=1`,
       {
         headers: {
-          'Authorization': `Bearer ${auth.token}`,
+          'Authorization': `Bearer ${token}`,
           'Accept': 'application/vnd.github.v3+json',
         },
       }
@@ -63,7 +92,7 @@ export async function GET(request: NextRequest) {
         `https://api.github.com/repos/${owner}/${repoName}/git/trees/master?recursive=1`,
         {
           headers: {
-            'Authorization': `Bearer ${auth.token}`,
+            'Authorization': `Bearer ${token}`,
             'Accept': 'application/vnd.github.v3+json',
           },
         }
@@ -80,7 +109,7 @@ export async function GET(request: NextRequest) {
       `https://api.github.com/repos/${owner}/${repoName}/issues?state=open&labels=bug&per_page=100`,
       {
         headers: {
-          'Authorization': `Bearer ${auth.token}`,
+          'Authorization': `Bearer ${token}`,
           'Accept': 'application/vnd.github.v3+json',
         },
       }
@@ -157,30 +186,6 @@ export async function GET(request: NextRequest) {
 
   } catch (error) {
     console.error('Logic flow overview error:', error)
-
-    // 폴백 데이터 반환
-    const fallbackModules: Module[] = [
-      { name: 'auth', path: 'src/auth/', status: 'normal', issue_count: 0, function_count: 5 },
-      { name: 'api', path: 'src/api/', status: 'normal', issue_count: 0, function_count: 10 },
-      { name: 'components', path: 'src/components/', status: 'normal', issue_count: 0, function_count: 8 },
-      { name: 'lib', path: 'src/lib/', status: 'normal', issue_count: 0, function_count: 4 },
-    ]
-
-    return NextResponse.json({
-      level: 'project',
-      repo,
-      modules: fallbackModules,
-      mermaid_code: `block-beta
-  columns 4
-  auth["auth"]
-  api["api"]
-  components["components"]
-  lib["lib"]`,
-      summary: {
-        total_modules: 4,
-        error_modules: 0,
-        total_issues: 0,
-      },
-    })
+    return NextResponse.json(createFallbackResponse(repo))
   }
 }

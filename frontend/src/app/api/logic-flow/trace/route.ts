@@ -6,7 +6,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/auth'
+import { getGitHubTokenFromSession } from '@/lib/auth'
 
 interface Step {
   order: number
@@ -27,12 +27,6 @@ interface TraceResponse {
 }
 
 export async function POST(request: NextRequest) {
-  // 인증 확인
-  const auth = await requireAuth()
-  if ('error' in auth) {
-    return NextResponse.json({ error: auth.error }, { status: auth.status })
-  }
-
   try {
     const body = await request.json()
     const { repo, function: funcName, path, input_example } = body
@@ -41,16 +35,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'repo and function parameters required' }, { status: 400 })
     }
 
+    // 인증 확인 (선택적)
+    const { token } = await getGitHubTokenFromSession()
+
     const [owner, repoName] = repo.split('/')
 
-    // 파일 내용 가져오기 (path가 제공된 경우)
+    // 파일 내용 가져오기 (path가 제공되고 인증된 경우)
     let codeContent = ''
-    if (path) {
+    if (path && token) {
       const fileResponse = await fetch(
         `https://api.github.com/repos/${owner}/${repoName}/contents/${path}`,
         {
           headers: {
-            'Authorization': `Bearer ${auth.token}`,
+            'Authorization': `Bearer ${token}`,
             'Accept': 'application/vnd.github.v3+json',
           },
         }
