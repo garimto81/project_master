@@ -588,7 +588,24 @@ export async function POST(request: NextRequest) {
       }
     })
 
-    // 8. Mermaid 다이어그램 생성 (데이터 흐름도)
+    // 8. Mermaid 다이어그램 생성 (데이터 흐름도) - Issue #6 개선
+    // 레이어별 색상 정의
+    const LAYER_COLORS: Record<string, { fill: string; stroke: string; text: string }> = {
+      ui: { fill: '#dbeafe', stroke: '#3b82f6', text: '#1e40af' },
+      logic: { fill: '#dcfce7', stroke: '#22c55e', text: '#166534' },
+      server: { fill: '#ffedd5', stroke: '#f97316', text: '#9a3412' },
+      data: { fill: '#e0e7ff', stroke: '#6366f1', text: '#3730a3' },
+    }
+
+    // 순환 의존성에 포함된 파일 추출
+    const circularFiles = new Set<string>()
+    for (const cd of circularDependencies) {
+      cd.cycle.forEach(file => {
+        const fileName = file.split('/').pop()?.replace(/\.(tsx?|jsx?)$/, '') || ''
+        circularFiles.add(fileName)
+      })
+    }
+
     const mermaidLines = [
       'flowchart TB',
       '  subgraph User["👤 사용자"]',
@@ -596,40 +613,77 @@ export async function POST(request: NextRequest) {
       '  end',
     ]
 
-    // 레이어 서브그래프
+    // 레이어 서브그래프 (색상 적용)
     for (const layer of layers) {
       const hasIssue = issues.some((i: any) => i.related_layer === layer.name)
-      const issueStyle = hasIssue ? ':::hasIssue' : ''
+      const colors = LAYER_COLORS[layer.name] || LAYER_COLORS.logic
 
       mermaidLines.push(`  subgraph ${layer.name}["${layer.displayName}"]`)
+      mermaidLines.push(`    style ${layer.name} fill:${colors.fill},stroke:${colors.stroke}`)
 
-      for (const mod of layer.modules.slice(0, 3)) {
+      for (const mod of layer.modules.slice(0, 4)) {
         const safeMod = mod.replace(/[^a-zA-Z0-9]/g, '_')
-        mermaidLines.push(`    ${layer.name}_${safeMod}["${mod}"]`)
+        const nodeId = `${layer.name}_${safeMod}`
+        const isCircular = circularFiles.has(mod)
+        const icon = isCircular ? '🔴 ' : ''
+
+        mermaidLines.push(`    ${nodeId}["${icon}${mod}"]`)
+
+        // 순환 의존성 노드 스타일
+        if (isCircular) {
+          mermaidLines.push(`    style ${nodeId} fill:#fef2f2,stroke:#dc2626,stroke-width:3px`)
+        }
       }
 
-      if (layer.modules.length > 3) {
-        mermaidLines.push(`    ${layer.name}_more["...외 ${layer.modules.length - 3}개"]`)
+      if (layer.modules.length > 4) {
+        mermaidLines.push(`    ${layer.name}_more["...외 ${layer.modules.length - 4}개"]`)
       }
 
       mermaidLines.push('  end')
     }
 
-    // 연결선
+    // 연결선 (타입에 따른 스타일)
     mermaidLines.push('  action --> ui')
 
     for (const conn of connections) {
-      mermaidLines.push(`  ${conn.from} -->|"${conn.label}"| ${conn.to}`)
+      const label = conn.label || ''
+      // 타입에 따른 연결선 스타일
+      if (conn.type === 'import') {
+        mermaidLines.push(`  ${conn.from} -.->|"${label}"| ${conn.to}`)
+      } else {
+        mermaidLines.push(`  ${conn.from} -->|"${label}"| ${conn.to}`)
+      }
     }
 
-    // 스타일
-    mermaidLines.push('  classDef hasIssue fill:#fef2f2,stroke:#dc2626')
+    // 순환 의존성 연결선 (빨간 점선)
+    for (const cd of circularDependencies.slice(0, 3)) {
+      if (cd.cycle.length >= 2) {
+        const from = inferLayer(cd.cycle[0])
+        const to = inferLayer(cd.cycle[1])
+        if (from !== to) {
+          mermaidLines.push(`  ${from} <-.->|"⚠️ 순환"| ${to}`)
+        }
+      }
+    }
+
+    // 레이어별 스타일 클래스 정의
+    mermaidLines.push(`  classDef ui fill:${LAYER_COLORS.ui.fill},stroke:${LAYER_COLORS.ui.stroke},color:${LAYER_COLORS.ui.text}`)
+    mermaidLines.push(`  classDef logic fill:${LAYER_COLORS.logic.fill},stroke:${LAYER_COLORS.logic.stroke},color:${LAYER_COLORS.logic.text}`)
+    mermaidLines.push(`  classDef server fill:${LAYER_COLORS.server.fill},stroke:${LAYER_COLORS.server.stroke},color:${LAYER_COLORS.server.text}`)
+    mermaidLines.push(`  classDef data fill:${LAYER_COLORS.data.fill},stroke:${LAYER_COLORS.data.stroke},color:${LAYER_COLORS.data.text}`)
+    mermaidLines.push('  classDef hasIssue fill:#fef2f2,stroke:#dc2626,stroke-dasharray:5 5')
+    mermaidLines.push('  classDef circular fill:#fef2f2,stroke:#dc2626,stroke-width:3px')
 
     // 이슈 있는 레이어에 스타일 적용
     for (const issue of issues) {
       if (issue.related_layer) {
         mermaidLines.push(`  class ${issue.related_layer} hasIssue`)
       }
+    }
+
+    // 레이어 클래스 적용
+    for (const layer of layers) {
+      mermaidLines.push(`  class ${layer.name} ${layer.name}`)
     }
 
     // v6.3: 분석 통계

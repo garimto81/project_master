@@ -133,13 +133,23 @@ export async function analyzeWithSkott(
 }
 
 /**
- * 그래프에서 Mermaid 다이어그램 생성
+ * 그래프에서 Mermaid 다이어그램 생성 - Issue #6 개선
+ * 레이어별 색상 구분, 순환 의존성 강조
  */
 function generateMermaidFromGraph(
   nodes: string[],
   edges: Array<{ from: string; to: string }>,
   circularDeps: string[][]
 ): string {
+  // 레이어별 색상 정의
+  const LAYER_COLORS: Record<string, { fill: string; stroke: string; text: string }> = {
+    ui: { fill: '#dbeafe', stroke: '#3b82f6', text: '#1e40af' },
+    logic: { fill: '#dcfce7', stroke: '#22c55e', text: '#166534' },
+    api: { fill: '#ffedd5', stroke: '#f97316', text: '#9a3412' },
+    lib: { fill: '#f3f4f6', stroke: '#6b7280', text: '#374151' },
+    other: { fill: '#f5f5f5', stroke: '#a3a3a3', text: '#525252' },
+  }
+
   const lines: string[] = ['flowchart TB']
 
   // 순환 의존성에 포함된 노드 집합
@@ -174,18 +184,21 @@ function generateMermaidFromGraph(
   for (const [layer, layerNodes] of Object.entries(layers)) {
     if (layerNodes.length === 0) continue
 
+    const colors = LAYER_COLORS[layer] || LAYER_COLORS.other
     lines.push(`  subgraph ${layer}["${layerNames[layer]}"]`)
+    lines.push(`    style ${layer} fill:${colors.fill},stroke:${colors.stroke}`)
 
     for (const node of layerNodes.slice(0, 8)) {
-      // 최대 8개
       const safeId = sanitizeNodeId(node)
       const shortName = getShortName(node)
       const isCircular = circularNodes.has(node)
+      const icon = isCircular ? '🔴 ' : ''
 
+      lines.push(`    ${safeId}["${icon}${shortName}"]`)
+
+      // 순환 의존성 노드 스타일
       if (isCircular) {
-        lines.push(`    ${safeId}["${shortName} 🔴"]`)
-      } else {
-        lines.push(`    ${safeId}["${shortName}"]`)
+        lines.push(`    style ${safeId} fill:#fef2f2,stroke:#dc2626,stroke-width:3px`)
       }
     }
 
@@ -199,7 +212,6 @@ function generateMermaidFromGraph(
   // 연결선 추가 (레이어 간 주요 연결만)
   const addedEdges = new Set<string>()
   for (const edge of edges.slice(0, 30)) {
-    // 최대 30개 연결
     const fromLayer = inferLayerFromPath(edge.from)
     const toLayer = inferLayerFromPath(edge.to)
 
@@ -213,9 +225,32 @@ function generateMermaidFromGraph(
     }
   }
 
-  // 순환 의존성 스타일
+  // 순환 의존성 연결선 (빨간 점선)
+  for (const cycle of circularDeps.slice(0, 3)) {
+    if (cycle.length >= 2) {
+      const from = inferLayerFromPath(cycle[0])
+      const to = inferLayerFromPath(cycle[1])
+      if (from !== to) {
+        lines.push(`  ${from} <-.->|"⚠️ 순환"| ${to}`)
+      }
+    }
+  }
+
+  // 레이어별 스타일 클래스 정의
+  for (const [layer, colors] of Object.entries(LAYER_COLORS)) {
+    lines.push(`  classDef ${layer} fill:${colors.fill},stroke:${colors.stroke},color:${colors.text}`)
+  }
+  lines.push('  classDef circular fill:#fef2f2,stroke:#dc2626,stroke-width:3px')
+
+  // 레이어 클래스 적용
+  for (const layer of Object.keys(layers)) {
+    if (layers[layer].length > 0) {
+      lines.push(`  class ${layer} ${layer}`)
+    }
+  }
+
+  // 순환 의존성 노드에 클래스 적용
   if (circularNodes.size > 0) {
-    lines.push('  classDef circular fill:#fef2f2,stroke:#dc2626')
     for (const node of circularNodes) {
       const safeId = sanitizeNodeId(node)
       lines.push(`  class ${safeId} circular`)
