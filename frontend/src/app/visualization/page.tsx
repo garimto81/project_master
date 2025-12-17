@@ -73,6 +73,12 @@ interface Connection {
   label?: string
 }
 
+interface CircularDependency {
+  cycle: string[]
+  severity: 'warning' | 'error'
+  suggestion: string
+}
+
 interface AnalyzeData {
   repo: string
   data_flow: {
@@ -80,6 +86,8 @@ interface AnalyzeData {
     layers: Layer[]
     connections?: Connection[]
   }
+  circular_dependencies?: CircularDependency[]
+  unused_files?: string[]
   risk_points: Array<{
     location: string
     function: string
@@ -95,6 +103,13 @@ interface AnalyzeData {
   }>
   mermaid_code: string
   summary: string
+  stats?: {
+    totalFiles: number
+    analyzedFiles: number
+    totalDependencies: number
+    circularCount: number
+    unusedCount: number
+  }
 }
 
 function VisualizationContent() {
@@ -595,11 +610,28 @@ function VisualizationContent() {
                   border: '1px solid #e2e8f0',
                 }}>
                   <summary style={{ cursor: 'pointer', fontWeight: 500, color: '#1e293b' }}>
-                    📈 Mermaid 다이어그램 보기
+                    📈 Mermaid 다이어그램 보기 (클릭하여 확대/축소)
                   </summary>
                   <div style={{ marginTop: '16px' }}>
                     {analyzeData.mermaid_code && (
-                      <MermaidDiagram chart={analyzeData.mermaid_code} />
+                      <MermaidDiagram
+                        chart={analyzeData.mermaid_code}
+                        enableZoom={true}
+                        showLegend={true}
+                        circularNodes={analyzeData.circular_dependencies?.flatMap(cd => cd.cycle) || []}
+                        onNodeClick={(nodeId) => {
+                          // 노드 클릭 시 해당 레이어로 이동
+                          const layerMatch = nodeId.match(/^(ui|logic|server|data)_/)
+                          if (layerMatch) {
+                            const layerName = layerMatch[1]
+                            const layer = analyzeData.data_flow.layers.find(l => l.name === layerName)
+                            if (layer) {
+                              setSelectedLayer(layer.displayName)
+                              setViewLevel('layer-detail')
+                            }
+                          }
+                        }}
+                      />
                     )}
                   </div>
                 </details>
@@ -818,7 +850,21 @@ function VisualizationContent() {
                   📊 모듈 구조 다이어그램
                 </h3>
                 {moduleMermaid ? (
-                  <MermaidDiagram chart={moduleMermaid} />
+                  <MermaidDiagram
+                    chart={moduleMermaid}
+                    enableZoom={true}
+                    showLegend={false}
+                    onNodeClick={(nodeId) => {
+                      // 함수 노드 클릭 시 Level 3로 이동
+                      const funcName = nodeId.replace(/^func_/, '').replace(/_/g, '')
+                      const func = moduleFunctions.find(f =>
+                        f.name.replace(/[^a-zA-Z0-9]/g, '') === funcName
+                      )
+                      if (func) {
+                        handleFunctionSelect(func.name)
+                      }
+                    }}
+                  />
                 ) : (
                   <div style={{ padding: '40px', textAlign: 'center', color: '#64748b' }}>
                     다이어그램 로딩 중...
