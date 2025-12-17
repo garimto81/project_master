@@ -23,6 +23,11 @@ const MermaidDiagram = dynamic(
   { ssr: false }
 )
 
+const InteractiveFlowDiagram = dynamic(
+  () => import('@/components/InteractiveFlowDiagram'),
+  { ssr: false }
+)
+
 const LogicFlowViewer = dynamic(
   () => import('@/components/logic-flow/LogicFlowViewer'),
   { ssr: false }
@@ -61,16 +66,24 @@ interface FunctionInfo {
   line_end: number
 }
 
+interface Connection {
+  from: string
+  to: string
+  type: 'call' | 'fetch' | 'import' | 'event'
+  label?: string
+}
+
 interface AnalyzeData {
   repo: string
   data_flow: {
     entry_points: string[]
     layers: Layer[]
+    connections?: Connection[]
   }
   risk_points: Array<{
     location: string
     function: string
-    risk: string
+    risk: 'high' | 'medium' | 'low'
     reason: string
     suggestion: string
   }>
@@ -78,6 +91,7 @@ interface AnalyzeData {
     number: number
     title: string
     labels: string[]
+    related_layer?: string
   }>
   mermaid_code: string
   summary: string
@@ -458,58 +472,69 @@ function VisualizationContent() {
             </p>
 
             <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '24px' }}>
-              {/* 다이어그램 */}
-              <div style={{
-                background: '#fff',
-                padding: '24px',
-                borderRadius: '12px',
-              }}>
-                <h3 style={{ margin: '0 0 16px', fontSize: '1rem', color: '#1e293b' }}>
-                  데이터 흐름 다이어그램
-                </h3>
-                {analyzeData.mermaid_code && (
-                  <MermaidDiagram chart={analyzeData.mermaid_code} />
-                )}
+              {/* 인터랙티브 다이어그램 */}
+              <div>
+                <InteractiveFlowDiagram
+                  layers={analyzeData.data_flow.layers}
+                  connections={analyzeData.data_flow.connections || []}
+                  riskPoints={analyzeData.risk_points}
+                  issues={analyzeData.issues}
+                  onLayerClick={handleLayerSelect}
+                  onModuleClick={(moduleName, layer) => {
+                    setSelectedLayer(layer.displayName)
+                    handleModuleSelect(moduleName)
+                  }}
+                />
               </div>
 
-              {/* 레이어 목록 */}
-              <div>
-                <h3 style={{ margin: '0 0 16px', fontSize: '1rem', color: '#1e293b' }}>
-                  레이어 선택
-                </h3>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  {analyzeData.data_flow.layers.map((layer) => (
-                    <button
-                      key={layer.name}
-                      onClick={() => handleLayerSelect(layer)}
-                      style={{
-                        padding: '16px',
-                        background: '#fff',
-                        border: '2px solid #e2e8f0',
-                        borderRadius: '8px',
-                        textAlign: 'left',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s',
-                      }}
-                      onMouseEnter={(e) => e.currentTarget.style.borderColor = '#3b82f6'}
-                      onMouseLeave={(e) => e.currentTarget.style.borderColor = '#e2e8f0'}
-                    >
-                      <div style={{ fontWeight: 600, color: '#1e293b', marginBottom: '4px' }}>
-                        {layer.displayName}
+              {/* 사이드바: 요약 정보 */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {/* 분석 요약 */}
+                <div style={{
+                  padding: '20px',
+                  background: '#fff',
+                  borderRadius: '12px',
+                  border: '1px solid #e2e8f0',
+                }}>
+                  <h3 style={{ margin: '0 0 16px', fontSize: '1rem', color: '#1e293b' }}>
+                    📊 분석 요약
+                  </h3>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                    <div style={{ padding: '12px', background: '#f1f5f9', borderRadius: '8px', textAlign: 'center' }}>
+                      <div style={{ fontSize: '24px', fontWeight: 700, color: '#1e293b' }}>
+                        {analyzeData.data_flow.layers.length}
                       </div>
-                      <div style={{ fontSize: '13px', color: '#64748b' }}>
-                        {layer.description}
+                      <div style={{ fontSize: '12px', color: '#64748b' }}>레이어</div>
+                    </div>
+                    <div style={{ padding: '12px', background: '#f1f5f9', borderRadius: '8px', textAlign: 'center' }}>
+                      <div style={{ fontSize: '24px', fontWeight: 700, color: '#1e293b' }}>
+                        {analyzeData.data_flow.layers.reduce((sum, l) => sum + l.modules.length, 0)}
                       </div>
-                      <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '8px' }}>
-                        {layer.modules.length}개 모듈
+                      <div style={{ fontSize: '12px', color: '#64748b' }}>모듈</div>
+                    </div>
+                    <div style={{ padding: '12px', background: analyzeData.issues.length > 0 ? '#fef2f2' : '#f1f5f9', borderRadius: '8px', textAlign: 'center' }}>
+                      <div style={{ fontSize: '24px', fontWeight: 700, color: analyzeData.issues.length > 0 ? '#dc2626' : '#1e293b' }}>
+                        {analyzeData.issues.length}
                       </div>
-                    </button>
-                  ))}
+                      <div style={{ fontSize: '12px', color: '#64748b' }}>이슈</div>
+                    </div>
+                    <div style={{ padding: '12px', background: analyzeData.risk_points.length > 0 ? '#fffbeb' : '#f1f5f9', borderRadius: '8px', textAlign: 'center' }}>
+                      <div style={{ fontSize: '24px', fontWeight: 700, color: analyzeData.risk_points.length > 0 ? '#d97706' : '#1e293b' }}>
+                        {analyzeData.risk_points.length}
+                      </div>
+                      <div style={{ fontSize: '12px', color: '#64748b' }}>위험</div>
+                    </div>
+                  </div>
                 </div>
 
                 {/* 이슈 목록 */}
                 {analyzeData.issues.length > 0 && (
-                  <div style={{ marginTop: '24px' }}>
+                  <div style={{
+                    padding: '20px',
+                    background: '#fff',
+                    borderRadius: '12px',
+                    border: '1px solid #e2e8f0',
+                  }}>
                     <h3 style={{ margin: '0 0 12px', fontSize: '1rem', color: '#1e293b' }}>
                       🔴 열린 이슈 ({analyzeData.issues.length})
                     </h3>
@@ -534,7 +559,12 @@ function VisualizationContent() {
 
                 {/* 위험 지점 */}
                 {analyzeData.risk_points.length > 0 && (
-                  <div style={{ marginTop: '24px' }}>
+                  <div style={{
+                    padding: '20px',
+                    background: '#fff',
+                    borderRadius: '12px',
+                    border: '1px solid #e2e8f0',
+                  }}>
                     <h3 style={{ margin: '0 0 12px', fontSize: '1rem', color: '#1e293b' }}>
                       ⚠️ 위험 지점 ({analyzeData.risk_points.length})
                     </h3>
@@ -556,6 +586,23 @@ function VisualizationContent() {
                     </div>
                   </div>
                 )}
+
+                {/* Mermaid 다이어그램 (축소) */}
+                <details style={{
+                  padding: '20px',
+                  background: '#fff',
+                  borderRadius: '12px',
+                  border: '1px solid #e2e8f0',
+                }}>
+                  <summary style={{ cursor: 'pointer', fontWeight: 500, color: '#1e293b' }}>
+                    📈 Mermaid 다이어그램 보기
+                  </summary>
+                  <div style={{ marginTop: '16px' }}>
+                    {analyzeData.mermaid_code && (
+                      <MermaidDiagram chart={analyzeData.mermaid_code} />
+                    )}
+                  </div>
+                </details>
               </div>
             </div>
           </div>
@@ -575,33 +622,175 @@ function VisualizationContent() {
               const layer = analyzeData.data_flow.layers.find(l => l.displayName === selectedLayer)
               if (!layer) return null
 
+              // 레이어별 색상 설정
+              const layerColors: Record<string, { bg: string; border: string; icon: string }> = {
+                'ui': { bg: '#dbeafe', border: '#3b82f6', icon: '🖥️' },
+                'logic': { bg: '#dcfce7', border: '#22c55e', icon: '⚙️' },
+                'server': { bg: '#ffedd5', border: '#f97316', icon: '🌐' },
+                'data': { bg: '#e0e7ff', border: '#6366f1', icon: '💾' },
+              }
+              const colors = layerColors[layer.name] || layerColors.logic
+
+              // 모듈별 위험도 계산
+              const getModuleRisk = (modName: string): 'high' | 'medium' | 'low' | 'none' => {
+                const risks = analyzeData.risk_points.filter(r =>
+                  r.location.toLowerCase().includes(modName.toLowerCase())
+                )
+                if (risks.some(r => r.risk === 'high')) return 'high'
+                if (risks.some(r => r.risk === 'medium')) return 'medium'
+                if (risks.length > 0) return 'low'
+                return 'none'
+              }
+
+              const riskColors = {
+                high: { bg: '#fef2f2', border: '#dc2626', badge: '🔴' },
+                medium: { bg: '#fffbeb', border: '#d97706', badge: '🟡' },
+                low: { bg: '#f0fdf4', border: '#22c55e', badge: '🟢' },
+                none: { bg: '#fff', border: '#e2e8f0', badge: '' },
+              }
+
               return (
-                <div style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))',
-                  gap: '16px',
-                }}>
-                  {layer.modules.map((mod) => (
-                    <div
-                      key={mod}
-                      onClick={() => handleModuleSelect(mod)}
-                      style={{
-                        padding: '20px',
+                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '24px' }}>
+                  {/* 모듈 그리드 */}
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+                    gap: '16px',
+                  }}>
+                    {layer.modules.map((mod) => {
+                      const risk = getModuleRisk(mod)
+                      const rc = riskColors[risk]
+
+                      return (
+                        <div
+                          key={mod}
+                          data-testid={`module-card-${mod}`}
+                          onClick={() => handleModuleSelect(mod)}
+                          style={{
+                            padding: '20px',
+                            background: risk !== 'none' ? rc.bg : colors.bg,
+                            borderRadius: '12px',
+                            cursor: 'pointer',
+                            border: `2px solid ${risk !== 'none' ? rc.border : colors.border}`,
+                            transition: 'all 0.2s',
+                            position: 'relative',
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.transform = 'translateY(-2px)'
+                            e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)'
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.transform = 'translateY(0)'
+                            e.currentTarget.style.boxShadow = 'none'
+                          }}
+                        >
+                          {/* 위험도 배지 */}
+                          {risk !== 'none' && (
+                            <div style={{
+                              position: 'absolute',
+                              top: '8px',
+                              right: '8px',
+                              fontSize: '14px',
+                            }}>
+                              {rc.badge}
+                            </div>
+                          )}
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                            <span style={{ fontSize: '20px' }}>{colors.icon}</span>
+                            <h4 style={{ margin: 0, color: '#1e293b', fontSize: '15px' }}>{mod}</h4>
+                          </div>
+
+                          <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>
+                            클릭하여 함수 목록 보기 →
+                          </p>
+                        </div>
+                      )
+                    })}
+                  </div>
+
+                  {/* 사이드바: 레이어 정보 */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    {/* 레이어 정보 카드 */}
+                    <div style={{
+                      padding: '20px',
+                      background: colors.bg,
+                      borderRadius: '12px',
+                      border: `2px solid ${colors.border}`,
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
+                        <span style={{ fontSize: '32px' }}>{colors.icon}</span>
+                        <div>
+                          <h3 style={{ margin: 0, color: '#1e293b' }}>{layer.displayName}</h3>
+                          <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#64748b' }}>{layer.description}</p>
+                        </div>
+                      </div>
+                      <div style={{ fontSize: '14px', color: '#64748b' }}>
+                        <strong>{layer.modules.length}</strong>개 모듈
+                      </div>
+                    </div>
+
+                    {/* 위험도 범례 */}
+                    <div style={{
+                      padding: '16px',
+                      background: '#fff',
+                      borderRadius: '12px',
+                      border: '1px solid #e2e8f0',
+                    }}>
+                      <h4 style={{ margin: '0 0 12px', fontSize: '14px', color: '#1e293b' }}>
+                        위험도 표시
+                      </h4>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px' }}>
+                          <span>🔴</span>
+                          <span style={{ color: '#dc2626' }}>높음</span>
+                          <span style={{ color: '#64748b' }}>- 에러 처리 필요</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px' }}>
+                          <span>🟡</span>
+                          <span style={{ color: '#d97706' }}>중간</span>
+                          <span style={{ color: '#64748b' }}>- 개선 권장</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px' }}>
+                          <span>🟢</span>
+                          <span style={{ color: '#22c55e' }}>낮음</span>
+                          <span style={{ color: '#64748b' }}>- 양호</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 해당 레이어 관련 위험 지점 */}
+                    {analyzeData.risk_points.filter(r =>
+                      layer.modules.some(m => r.location.toLowerCase().includes(m.toLowerCase()))
+                    ).length > 0 && (
+                      <div style={{
+                        padding: '16px',
                         background: '#fff',
                         borderRadius: '12px',
-                        cursor: 'pointer',
-                        border: '2px solid transparent',
-                        transition: 'all 0.2s',
-                      }}
-                      onMouseEnter={(e) => e.currentTarget.style.borderColor = '#3b82f6'}
-                      onMouseLeave={(e) => e.currentTarget.style.borderColor = 'transparent'}
-                    >
-                      <h4 style={{ margin: 0, color: '#1e293b' }}>{mod}</h4>
-                      <p style={{ margin: '8px 0 0', fontSize: '13px', color: '#64748b' }}>
-                        클릭하여 함수 목록 보기 →
-                      </p>
-                    </div>
-                  ))}
+                        border: '1px solid #e2e8f0',
+                      }}>
+                        <h4 style={{ margin: '0 0 12px', fontSize: '14px', color: '#1e293b' }}>
+                          ⚠️ 이 레이어의 위험 지점
+                        </h4>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          {analyzeData.risk_points
+                            .filter(r => layer.modules.some(m => r.location.toLowerCase().includes(m.toLowerCase())))
+                            .slice(0, 5)
+                            .map((risk, idx) => (
+                              <div key={idx} style={{
+                                padding: '10px',
+                                background: risk.risk === 'high' ? '#fef2f2' : '#fffbeb',
+                                borderRadius: '6px',
+                                fontSize: '12px',
+                              }}>
+                                <div style={{ fontWeight: 500, color: '#1e293b' }}>{risk.function}()</div>
+                                <div style={{ color: '#64748b', marginTop: '4px' }}>{risk.reason}</div>
+                              </div>
+                            ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )
             })()}
