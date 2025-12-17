@@ -129,32 +129,15 @@ function analyzeCodeFlow(funcName: string, code: string, inputExample?: Record<s
     data: inputExample || null,
   })
 
-  // 코드가 없으면 기본 흐름 반환
+  // 코드가 없으면 에러 (실제 코드 필요)
   if (!code) {
     steps.push({
       order: stepOrder++,
-      node: 'A',
-      label: '입력 검증',
-      type: 'action',
+      node: 'ERR',
+      label: '코드를 분석할 수 없습니다',
+      type: 'error',
       data: null,
     })
-
-    steps.push({
-      order: stepOrder++,
-      node: 'B',
-      label: '처리 실행',
-      type: 'process',
-      data: null,
-    })
-
-    steps.push({
-      order: stepOrder++,
-      node: 'END',
-      label: '완료',
-      type: 'end',
-      data: null,
-    })
-
     return steps
   }
 

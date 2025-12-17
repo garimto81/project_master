@@ -1,16 +1,16 @@
 'use client'
 
-import { useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { Suspense, useEffect } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 
 /**
- * OAuth Callback Page
- * Supabase OAuth 인증 후 리디렉션되는 페이지
- * URL fragment에서 토큰을 추출하여 세션을 설정
+ * OAuth Callback 내부 컴포넌트
+ * useSearchParams를 사용하므로 Suspense로 감싸야 함
  */
-export default function AuthCallbackPage() {
+function AuthCallbackContent() {
   const router = useRouter()
+  const searchParams = useSearchParams()
 
   useEffect(() => {
     const handleCallback = async () => {
@@ -28,8 +28,9 @@ export default function AuthCallbackPage() {
           }
         }
 
-        // 홈페이지로 리디렉션
-        router.replace('/')
+        // returnTo 파라미터가 있으면 해당 경로로, 없으면 홈으로
+        const returnTo = searchParams.get('returnTo') || '/'
+        router.replace(returnTo)
       } catch (err) {
         console.error('Callback processing error:', err)
         router.replace('/')
@@ -37,7 +38,7 @@ export default function AuthCallbackPage() {
     }
 
     handleCallback()
-  }, [router])
+  }, [router, searchParams])
 
   return (
     <main style={{
@@ -66,5 +67,31 @@ export default function AuthCallbackPage() {
         }
       `}</style>
     </main>
+  )
+}
+
+/**
+ * OAuth Callback Page
+ * Supabase OAuth 인증 후 리디렉션되는 페이지
+ * useSearchParams()를 Suspense로 감싸서 정적 생성 오류 방지
+ */
+export default function AuthCallbackPage() {
+  return (
+    <Suspense fallback={
+      <main style={{
+        minHeight: '100vh',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)',
+        color: '#fff',
+      }}>
+        <h1 style={{ fontSize: '2rem', marginBottom: '1rem' }}>DevFlow</h1>
+        <p style={{ color: '#94a3b8' }}>로딩 중...</p>
+      </main>
+    }>
+      <AuthCallbackContent />
+    </Suspense>
   )
 }

@@ -28,33 +28,6 @@ interface OverviewResponse {
   }
 }
 
-// 폴백 응답 생성 (인증 없거나 API 실패 시)
-function createFallbackResponse(repo: string): OverviewResponse {
-  const fallbackModules: Module[] = [
-    { name: 'auth', path: 'src/auth/', status: 'normal', issue_count: 0, function_count: 5 },
-    { name: 'api', path: 'src/api/', status: 'normal', issue_count: 0, function_count: 10 },
-    { name: 'components', path: 'src/components/', status: 'normal', issue_count: 0, function_count: 8 },
-    { name: 'lib', path: 'src/lib/', status: 'normal', issue_count: 0, function_count: 4 },
-  ]
-
-  return {
-    level: 'project',
-    repo,
-    modules: fallbackModules,
-    mermaid_code: `block-beta
-  columns 4
-  auth["auth"]
-  api["api"]
-  components["components"]
-  lib["lib"]`,
-    summary: {
-      total_modules: 4,
-      error_modules: 0,
-      total_issues: 0,
-    },
-  }
-}
-
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const repo = searchParams.get('repo')
@@ -63,12 +36,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'repo parameter required' }, { status: 400 })
   }
 
-  // 인증 확인 (선택적 - 없으면 폴백 데이터 반환)
+  // 인증 확인
   const { token } = await getGitHubTokenFromSession()
 
-  // 인증 없으면 즉시 폴백 데이터 반환
   if (!token) {
-    return NextResponse.json(createFallbackResponse(repo))
+    return NextResponse.json({ error: 'GitHub 인증이 필요합니다. 로그인해주세요.' }, { status: 401 })
   }
 
   try {
@@ -186,6 +158,6 @@ export async function GET(request: NextRequest) {
 
   } catch (error) {
     console.error('Logic flow overview error:', error)
-    return NextResponse.json(createFallbackResponse(repo))
+    return NextResponse.json({ error: '프로젝트 구조를 불러올 수 없습니다' }, { status: 500 })
   }
 }

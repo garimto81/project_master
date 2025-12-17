@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
+import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { resolveIssueWithAI, getAvailableModels, type AIModel as APIModel } from '@/lib/api'
 
@@ -27,14 +28,20 @@ const DEFAULT_MODELS: AIModel[] = [
   { id: 'qwen', name: 'Qwen', description: 'Alibaba Qwen CLI', status: 'available' },
 ]
 
-const mockIssues: Issue[] = [
-  { id: 1, number: 1, title: 'Fix authentication bug', state: 'open', labels: ['bug'] },
-  { id: 2, number: 2, title: 'Add dark mode', state: 'open', labels: ['enhancement'] },
-  { id: 3, number: 3, title: 'Update README', state: 'closed', labels: ['docs'] },
+// E2E 테스트용 Mock 이슈 데이터
+const MOCK_ISSUES: Issue[] = [
+  { id: 1, number: 1, title: '테스트 이슈 #1', state: 'open', labels: ['bug'] },
+  { id: 2, number: 2, title: '테스트 이슈 #2', state: 'open', labels: ['enhancement'] },
+  { id: 3, number: 3, title: '닫힌 이슈 #3', state: 'closed', labels: [] },
 ]
 
-export default function ProjectPage() {
-  const [issues] = useState<Issue[]>(mockIssues)
+function ProjectContent() {
+  const searchParams = useSearchParams()
+  const repoParam = searchParams.get('repo') || ''
+  const testMode = searchParams.get('test') === 'true'
+  const repoName = repoParam.split('/').pop() || '프로젝트'
+
+  const [issues, setIssues] = useState<Issue[]>([])
   const [selectedIssue, setSelectedIssue] = useState<Issue | null>(null)
   const [selectedModel, setSelectedModel] = useState<string>('claude')
   const [isResolving, setIsResolving] = useState(false)
@@ -46,6 +53,35 @@ export default function ProjectPage() {
 
   const openIssues = issues.filter(i => i.state === 'open')
   const closedIssues = issues.filter(i => i.state === 'closed')
+
+  // GitHub 이슈 목록 가져오기 (테스트 모드에서는 mock 데이터 사용)
+  useEffect(() => {
+    if (testMode) {
+      setIssues(MOCK_ISSUES)
+      return
+    }
+
+    if (!repoParam) return
+
+    const fetchIssues = async () => {
+      try {
+        const res = await fetch(`/api/issues?repo=${encodeURIComponent(repoParam)}`)
+        if (res.ok) {
+          const data = await res.json()
+          setIssues(data.issues?.map((issue: any) => ({
+            id: issue.id,
+            number: issue.number,
+            title: issue.title,
+            state: issue.state,
+            labels: issue.labels?.map((l: any) => l.name || l) || [],
+          })) || [])
+        }
+      } catch (err) {
+        console.error('Failed to fetch issues:', err)
+      }
+    }
+    fetchIssues()
+  }, [repoParam, testMode])
 
   // API에서 모델 목록 가져오기 (선택적)
   useEffect(() => {
@@ -108,7 +144,7 @@ export default function ProjectPage() {
   return (
     <main className="project-page" data-testid="project-page">
       <header data-testid="project-header">
-        <h1>sample-project</h1>
+        <h1>{repoName}</h1>
         <Link href="/" data-testid="back-btn">← 돌아가기</Link>
       </header>
 
@@ -224,5 +260,19 @@ export default function ProjectPage() {
         </section>
       </div>
     </main>
+  )
+}
+
+export default function ProjectPage() {
+  return (
+    <Suspense fallback={
+      <main className="project-page" data-testid="project-page">
+        <header data-testid="project-header">
+          <h1>로딩 중...</h1>
+        </header>
+      </main>
+    }>
+      <ProjectContent />
+    </Suspense>
   )
 }

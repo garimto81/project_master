@@ -70,28 +70,18 @@ export default function StepPlayer({
         }),
       })
 
-      if (!response.ok) throw new Error('Failed to load trace')
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to load trace')
+      }
 
       const data = await response.json()
       setSteps(data.steps || [])
       setMermaidCode(data.mermaid_code || '')
       setCurrentStepIndex(0)
-    } catch (err) {
+    } catch (err: any) {
       console.error('Load trace error:', err)
-      setError('실행 흐름을 불러올 수 없습니다')
-
-      // 폴백 데이터
-      setSteps([
-        { order: 1, node: 'START', label: '시작', type: 'start', data: null },
-        { order: 2, node: 'A', label: '처리', type: 'action', data: null },
-        { order: 3, node: 'END', label: '완료', type: 'end', data: null },
-      ])
-      setMermaidCode(`flowchart TB
-  START([시작]):::current
-  A[처리]
-  END([완료])
-  START --> A --> END
-  classDef current fill:#3b82f6,color:#fff`)
+      setError(err.message || '실행 흐름을 불러올 수 없습니다')
     } finally {
       setLoading(false)
     }

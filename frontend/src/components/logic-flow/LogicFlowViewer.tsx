@@ -60,22 +60,19 @@ export default function LogicFlowViewer({
 
     try {
       const response = await fetch(`/api/logic-flow/overview?repo=${encodeURIComponent(repo)}`)
-      if (!response.ok) throw new Error('Failed to load project overview')
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to load project overview')
+      }
 
       const data = await response.json()
       setModules(data.modules || [])
       setMermaidCode(data.mermaid_code || '')
       setBreadcrumb([repo])
-    } catch (err) {
+    } catch (err: any) {
       console.error('Load overview error:', err)
-      setError('프로젝트 구조를 불러올 수 없습니다')
-      // 폴백 데이터
-      setMermaidCode(`block-beta
-  columns 4
-  auth["auth"]
-  api["api"]
-  components["components"]
-  lib["lib"]`)
+      setError(err.message || '프로젝트 구조를 불러올 수 없습니다')
     } finally {
       setLoading(false)
     }
@@ -90,16 +87,20 @@ export default function LogicFlowViewer({
       const response = await fetch(
         `/api/logic-flow/module?repo=${encodeURIComponent(repo)}&module=${encodeURIComponent(moduleName)}`
       )
-      if (!response.ok) throw new Error('Failed to load module detail')
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to load module detail')
+      }
 
       const data = await response.json()
       setFunctions(data.functions || [])
       setMermaidCode(data.mermaid_code || '')
       setCurrentModule(moduleName)
       setBreadcrumb([repo, moduleName])
-    } catch (err) {
+    } catch (err: any) {
       console.error('Load module error:', err)
-      setError('모듈 정보를 불러올 수 없습니다')
+      setError(err.message || '모듈 정보를 불러올 수 없습니다')
     } finally {
       setLoading(false)
     }

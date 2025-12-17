@@ -29,24 +29,6 @@ interface ModuleResponse {
   }
 }
 
-// 폴백 응답 생성
-function createFallbackResponse(repo: string, moduleName: string): ModuleResponse {
-  return {
-    level: 'module',
-    repo,
-    module: moduleName,
-    functions: [
-      { name: 'main', type: 'function', calls: ['helper'], status: 'normal', line_start: 1, line_end: 20 },
-      { name: 'helper', type: 'function', calls: [], status: 'normal', line_start: 22, line_end: 35 },
-    ],
-    mermaid_code: `flowchart LR
-  F0["⚙️ main"]
-  F1["⚙️ helper"]
-  F0 --> F1`,
-    summary: { total_functions: 2, error_functions: 0 },
-  }
-}
-
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const repo = searchParams.get('repo')
@@ -56,11 +38,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'repo and module parameters required' }, { status: 400 })
   }
 
-  // 인증 확인 (선택적 - 없으면 폴백 데이터 반환)
+  // 인증 확인
   const { token } = await getGitHubTokenFromSession()
 
   if (!token) {
-    return NextResponse.json(createFallbackResponse(repo, moduleName))
+    return NextResponse.json({ error: 'GitHub 인증이 필요합니다. 로그인해주세요.' }, { status: 401 })
   }
 
   try {
@@ -181,6 +163,6 @@ export async function GET(request: NextRequest) {
 
   } catch (error) {
     console.error('Module detail error:', error)
-    return NextResponse.json(createFallbackResponse(repo, moduleName))
+    return NextResponse.json({ error: '모듈 정보를 불러올 수 없습니다' }, { status: 500 })
   }
 }
