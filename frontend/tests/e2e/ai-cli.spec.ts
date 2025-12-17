@@ -14,8 +14,11 @@ import { test, expect } from '@playwright/test';
 
 test.describe('AI CLI 연동', () => {
   test.beforeEach(async ({ page }) => {
-    // 프로젝트 페이지로 직접 이동, 이슈 선택
-    await page.goto('/project');
+    // 테스트 모드로 프로젝트 페이지 이동 (mock 데이터 사용)
+    await page.goto('/project?repo=test/mock-repo&test=true');
+
+    // 이슈 목록 로드 대기 후 첫 번째 이슈 클릭
+    await page.waitForSelector('[data-testid="issue-1"]', { timeout: 10000 });
     await page.getByTestId('issue-1').click();
     await expect(page.getByTestId('issue-detail')).toBeVisible();
   });
@@ -48,8 +51,8 @@ test.describe('AI CLI 연동', () => {
     // Act - AI 해결 시작
     await page.getByTestId('ai-resolve-btn').click();
 
-    // Assert - 진행 표시 및 사용 모델 확인
-    await expect(page.getByTestId('progress-display')).toBeVisible();
+    // Assert - 진행 표시 확인 (mock 모드에서 빠르게 진행)
+    await expect(page.getByTestId('progress-display')).toBeVisible({ timeout: 5000 });
     await expect(page.getByTestId('model-used')).toContainText('claude');
   });
 
@@ -61,7 +64,7 @@ test.describe('AI CLI 연동', () => {
     await page.getByTestId('ai-resolve-btn').click();
 
     // Assert - 진행 표시 및 사용 모델 확인
-    await expect(page.getByTestId('progress-display')).toBeVisible();
+    await expect(page.getByTestId('progress-display')).toBeVisible({ timeout: 5000 });
     await expect(page.getByTestId('model-used')).toContainText('codex');
   });
 
@@ -73,7 +76,7 @@ test.describe('AI CLI 연동', () => {
     await page.getByTestId('ai-resolve-btn').click();
 
     // Assert - 진행 표시 및 사용 모델 확인
-    await expect(page.getByTestId('progress-display')).toBeVisible();
+    await expect(page.getByTestId('progress-display')).toBeVisible({ timeout: 5000 });
     await expect(page.getByTestId('model-used')).toContainText('gemini');
   });
 
@@ -85,7 +88,7 @@ test.describe('AI CLI 연동', () => {
     await page.getByTestId('ai-resolve-btn').click();
 
     // Assert - 진행 표시 및 사용 모델 확인
-    await expect(page.getByTestId('progress-display')).toBeVisible();
+    await expect(page.getByTestId('progress-display')).toBeVisible({ timeout: 5000 });
     await expect(page.getByTestId('model-used')).toContainText('qwen');
   });
 });

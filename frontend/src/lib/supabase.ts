@@ -24,18 +24,23 @@ export const supabase: SupabaseClient | null = isSupabaseConfigured
 /**
  * GitHub OAuth 로그인
  * Supabase Auth가 GitHub 토큰을 자동으로 provider_token에 저장
+ * @param returnTo 로그인 후 이동할 경로 (선택)
  */
-export async function signInWithGitHub() {
+export async function signInWithGitHub(returnTo?: string) {
   if (!supabase) {
     return { data: null, error: new Error('Supabase not configured') }
   }
+
+  // returnTo가 있으면 콜백 URL에 포함
+  const callbackUrl = typeof window !== 'undefined'
+    ? `${window.location.origin}/auth/callback${returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : ''}`
+    : undefined
+
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: 'github',
     options: {
       scopes: 'read:user user:email repo',
-      redirectTo: typeof window !== 'undefined'
-        ? `${window.location.origin}/auth/callback`
-        : undefined
+      redirectTo: callbackUrl
     }
   })
   return { data, error }

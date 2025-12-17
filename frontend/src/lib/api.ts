@@ -11,6 +11,35 @@ export interface AIModel {
   available: boolean;
 }
 
+export interface Repository {
+  id: number;
+  name: string;
+  full_name: string;
+  description: string | null;
+  language: string | null;
+  open_issues_count: number;
+  stargazers_count: number;
+  updated_at: string;
+}
+
+export interface RepositoryDetail extends Repository {
+  html_url: string;
+  clone_url: string;
+  default_branch: string;
+  archived: boolean;
+  forks_count: number;
+  size: number;
+  contributors_count: number;
+  branches: string[];
+  recent_commits: Array<{
+    sha: string;
+    message: string;
+    author: string;
+    date: string;
+  }>;
+  languages: Record<string, number>;
+}
+
 export interface CLIStatus {
   claude: boolean;
   codex: boolean;
@@ -109,5 +138,28 @@ export async function resolveIssueWithFallback(request: AIResolveRequest): Promi
     throw new Error(error.detail || 'AI resolution with fallback failed');
   }
 
+  return response.json();
+}
+
+/**
+ * 레포지토리 목록 조회 (Next.js API Route 사용)
+ */
+export async function getRepositories(): Promise<{ repositories: Repository[] }> {
+  const response = await fetch('/api/repositories');
+  if (!response.ok) {
+    throw new Error('Failed to fetch repositories');
+  }
+  return response.json();
+}
+
+/**
+ * 레포지토리 상세 정보 조회 (Next.js API Route 사용)
+ */
+export async function getRepositoryDetail(fullName: string): Promise<RepositoryDetail> {
+  const [owner, repo] = fullName.split('/');
+  const response = await fetch(`/api/repositories/${owner}/${repo}`);
+  if (!response.ok) {
+    throw new Error('Failed to fetch repository detail');
+  }
   return response.json();
 }

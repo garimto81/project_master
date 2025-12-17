@@ -14,10 +14,8 @@ import { test, expect } from '@playwright/test';
 
 test.describe('이슈 관리', () => {
   test.beforeEach(async ({ page }) => {
-    // 로그인 후 프로젝트 페이지로 직접 이동
-    await page.goto('/');
-    await page.getByTestId('github-login-btn').click();
-    await page.goto('/project');
+    // 테스트 모드로 프로젝트 페이지 이동 (mock 데이터 사용, 로그인 불필요)
+    await page.goto('/project?repo=test/mock-repo&test=true');
     await expect(page.getByTestId('project-page')).toBeVisible();
   });
 

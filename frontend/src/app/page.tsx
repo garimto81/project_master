@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { getRepositories, type Repository } from '@/lib/api'
+import { signInWithGitHub, signOut, getSession } from '@/lib/supabase'
 
 // 폴백용 레포지토리 데이터
 const FALLBACK_REPOS: Repository[] = [
@@ -32,9 +33,25 @@ const LANGUAGE_COLORS: Record<string, string> = {
 export default function HomePage() {
   const router = useRouter()
   const [isLoggedIn, setIsLoggedIn] = useState(false)
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true)
   const [repositories, setRepositories] = useState<Repository[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
+
+  // 세션 확인
+  useEffect(() => {
+    const checkSession = async () => {
+      try {
+        const session = await getSession()
+        setIsLoggedIn(!!session)
+      } catch (err) {
+        console.error('Session check error:', err)
+      } finally {
+        setIsCheckingAuth(false)
+      }
+    }
+    checkSession()
+  }, [])
 
   // 레포지토리 로드
   useEffect(() => {
@@ -83,7 +100,7 @@ export default function HomePage() {
         <p style={{ color: '#94a3b8', marginBottom: '2rem' }}>비개발자를 위한 AI 협업 개발 플랫폼</p>
         <button
           data-testid="github-login-btn"
-          onClick={() => setIsLoggedIn(true)}
+          onClick={() => signInWithGitHub()}
           style={{
             padding: '16px 32px',
             fontSize: '1.1rem',
@@ -124,7 +141,10 @@ export default function HomePage() {
         <h1 style={{ margin: 0, fontSize: '1.5rem', color: '#1e293b' }}>DevFlow</h1>
         <button
           data-testid="logout-btn"
-          onClick={() => setIsLoggedIn(false)}
+          onClick={async () => {
+            await signOut()
+            setIsLoggedIn(false)
+          }}
           style={{
             padding: '8px 16px',
             background: '#f1f5f9',

@@ -42,9 +42,7 @@ export async function createServerSupabaseClient() {
 /**
  * 현재 사용자의 GitHub 토큰 가져오기
  *
- * 우선순위:
- * 1. Supabase Auth 세션의 provider_token (공개 웹앱 모드)
- * 2. GITHUB_TOKEN 환경변수 (로컬 개발 모드)
+ * Supabase Auth 세션의 provider_token만 사용 (하드코딩 폴백 제거)
  *
  * @returns GitHub Access Token 또는 null
  */
@@ -58,7 +56,7 @@ export async function getGitHubTokenFromSession(): Promise<{
   } | null
   error: string | null
 }> {
-  // 1. Supabase 세션에서 provider_token 확인
+  // Supabase 세션에서 provider_token 확인
   const supabase = await createServerSupabaseClient()
 
   if (supabase) {
@@ -93,37 +91,7 @@ export async function getGitHubTokenFromSession(): Promise<{
     }
   }
 
-  // 2. 로컬 개발용 환경변수 폴백
-  const envToken = process.env.GITHUB_TOKEN
-
-  if (envToken) {
-    try {
-      const userResponse = await fetch('https://api.github.com/user', {
-        headers: {
-          'Authorization': `Bearer ${envToken}`,
-          'Accept': 'application/vnd.github.v3+json',
-        },
-      })
-
-      if (userResponse.ok) {
-        const userData = await userResponse.json()
-        return {
-          token: envToken,
-          user: {
-            id: 'local-dev',
-            email: userData.email,
-            login: userData.login,
-            avatar_url: userData.avatar_url,
-          },
-          error: null,
-        }
-      }
-    } catch (e) {
-      console.error('GitHub API error:', e)
-    }
-  }
-
-  // 3. 인증 실패
+  // 인증 실패 - 로그인 필요
   return {
     token: null,
     user: null,

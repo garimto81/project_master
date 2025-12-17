@@ -14,11 +14,12 @@ import { test, expect } from '@playwright/test';
 
 test.describe('승인 플로우', () => {
   test.beforeEach(async ({ page }) => {
-    // 프로젝트 페이지로 직접 이동, 이슈 선택
-    await page.goto('/project');
+    // 테스트 모드로 프로젝트 페이지 이동 (mock 데이터 사용)
+    await page.goto('/project?repo=test/mock-repo&test=true');
+    await page.waitForSelector('[data-testid="issue-1"]', { timeout: 10000 });
     await page.getByTestId('issue-1').click();
 
-    // AI 해결 완료까지 대기 (API 실패 시 Mock 폴백 포함)
+    // AI 해결 완료까지 대기 (Mock 폴백으로 빠르게 진행)
     await page.getByTestId('ai-resolve-btn').click();
     await expect(page.getByTestId('approval-modal')).toBeVisible({ timeout: 15000 });
   });
