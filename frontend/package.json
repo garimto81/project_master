@@ -2,6 +2,9 @@
   "name": "gitcommand-center-frontend",
   "version": "0.1.0",
   "private": true,
+  "overrides": {
+    "glob": "^11.0.0"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -24,8 +27,8 @@
     "@playwright/test": "^1.40.0",
     "@types/node": "^20",
     "@types/react": "^18",
-    "eslint": "^8",
-    "eslint-config-next": "^16.0.10",
+    "eslint": "^8.57.1",
+    "eslint-config-next": "^14.2.35",
     "typescript": "^5"
   }
 }

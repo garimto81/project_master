@@ -243,7 +243,7 @@ function resolveImportPath(fromPath: string, importPath: string): string {
   // 상대 경로 해석 (간단한 버전)
   const fromDir = fromPath.split('/').slice(0, -1).join('/')
   const parts = importPath.split('/')
-  let result = fromDir.split('/')
+  const result = fromDir.split('/')
 
   for (const part of parts) {
     if (part === '..') {
@@ -479,7 +479,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 6. 위험 지점 분석 + import 파싱 (depth에 따라)
-    let riskPoints: RiskPoint[] = []
+    const riskPoints: RiskPoint[] = []
     const allImports: Array<{ from: string; to: string; imports: string[] }> = []
 
     if (include_risk && depth !== 'shallow') {

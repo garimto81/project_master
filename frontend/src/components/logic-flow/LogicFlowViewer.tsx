@@ -233,8 +233,8 @@ export default function LogicFlowViewer({
                 const target = e.target as HTMLElement
                 const nodeText = target.textContent?.trim()
                 if (nodeText && level === 'project') {
-                  const module = modules.find(m => nodeText.includes(m.name))
-                  if (module) handleDrillDown(module.name)
+                  const foundModule = modules.find(m => nodeText.includes(m.name))
+                  if (foundModule) handleDrillDown(foundModule.name)
                 }
               }}
             />
