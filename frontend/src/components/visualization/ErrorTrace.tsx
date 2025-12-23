@@ -40,15 +40,15 @@ export function ErrorTrace({ analysisResult, errorPath, onPathClick }: ErrorTrac
     })
 
     return errorPath.map((path, index) => {
-      const module = moduleMap.get(path)
+      const moduleData = moduleMap.get(path)
       const riskPoints = analysisResult.riskPoints.filter(rp => rp.path === path)
       const isError = index === errorPath.length - 1
 
       return {
         index,
         path,
-        moduleName: module?.name || path.split('/').pop() || path,
-        layer: module?.layer || 'unknown',
+        moduleName: moduleData?.name || path.split('/').pop() || path,
+        layer: moduleData?.layer || 'unknown',
         riskPoints,
         isError,
       }
