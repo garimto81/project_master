@@ -179,6 +179,7 @@ function VisualizationContent() {
   async function loadAnalyze() {
     setLoading(true)
     setError(null)
+    setAnalyzeData(null)  // 명시적 초기화
     try {
       const res = await fetch('/api/logic-flow/analyze', {
         method: 'POST',
@@ -189,14 +190,23 @@ function VisualizationContent() {
           include_risk: true,
         }),
       })
+
       if (!res.ok) {
-        const data = await res.json()
-        throw new Error(data.error || '코드 분석 실패')
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error || `코드 분석 실패 (HTTP ${res.status})`)
       }
+
       const data = await res.json()
+
+      // 응답 데이터 검증
+      if (!data || !data.data_flow || !data.data_flow.layers) {
+        throw new Error('분석 데이터가 불완전합니다. 다시 시도해주세요.')
+      }
+
       setAnalyzeData(data)
     } catch (err: any) {
-      setError(err.message)
+      console.error('loadAnalyze error:', err)
+      setError(err.message || '알 수 없는 오류가 발생했습니다.')
     } finally {
       setLoading(false)
     }
@@ -230,6 +240,9 @@ function VisualizationContent() {
     setSelectedLayer(null)
     setSelectedModule(null)
     setSelectedFunction(null)
+    setAnalyzeData(null)  // 이전 데이터 초기화
+    setError(null)        // 이전 에러 초기화
+    setLoading(true)      // 즉시 로딩 상태로 전환
     setViewLevel('big-picture')
   }
 
@@ -398,7 +411,50 @@ function VisualizationContent() {
                 </button>
               </>
             ) : (
-              error
+              <>
+                <div style={{ fontSize: '48px', marginBottom: '16px' }}>⚠️</div>
+                <h2 style={{ margin: '0 0 8px', fontSize: '1.2rem', color: '#dc2626' }}>
+                  분석 중 오류 발생
+                </h2>
+                <p style={{ margin: '0 0 16px', color: '#64748b' }}>
+                  {error}
+                </p>
+                <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+                  <button
+                    onClick={() => {
+                      setError(null)
+                      if (viewLevel === 'big-picture') {
+                        loadAnalyze()
+                      } else if (viewLevel === 'repos') {
+                        loadRepos()
+                      }
+                    }}
+                    style={{
+                      padding: '12px 24px',
+                      background: '#3b82f6',
+                      color: '#fff',
+                      border: 'none',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    다시 시도
+                  </button>
+                  <button
+                    onClick={handleBack}
+                    style={{
+                      padding: '12px 24px',
+                      background: '#f1f5f9',
+                      color: '#64748b',
+                      border: 'none',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    뒤로가기
+                  </button>
+                </div>
+              </>
             )}
           </div>
         )}
@@ -473,6 +529,39 @@ function VisualizationContent() {
                 </div>
               ))}
             </div>
+          </div>
+        )}
+
+        {/* Level 1-A: 큰 그림 - analyzeData 없을 때 대기 상태 */}
+        {!loading && viewLevel === 'big-picture' && !analyzeData && !error && (
+          <div data-testid="big-picture-empty-state" style={{
+            padding: '60px',
+            background: '#fff',
+            borderRadius: '12px',
+            textAlign: 'center',
+            color: '#64748b',
+          }}>
+            <div style={{ fontSize: '48px', marginBottom: '16px' }}>📊</div>
+            <h2 style={{ margin: '0 0 8px', color: '#1e293b' }}>
+              {selectedRepo} 분석 준비 중
+            </h2>
+            <p style={{ margin: '0 0 24px' }}>
+              분석이 시작되지 않았습니다.
+            </p>
+            <button
+              onClick={() => loadAnalyze()}
+              style={{
+                padding: '12px 24px',
+                background: '#3b82f6',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                fontSize: '14px',
+              }}
+            >
+              분석 시작
+            </button>
           </div>
         )}
 
