@@ -12,6 +12,8 @@
  *       GitHub API 기반 원격 분석은 analyze/route.ts에서 처리합니다.
  */
 
+import { LAYER_COLORS, VISUALIZATION_LIMITS } from './colors'
+
 export interface SkottAnalysisResult {
   // 의존성 그래프
   graph: {
@@ -141,15 +143,7 @@ function generateMermaidFromGraph(
   edges: Array<{ from: string; to: string }>,
   circularDeps: string[][]
 ): string {
-  // 레이어별 색상 정의
-  const LAYER_COLORS: Record<string, { fill: string; stroke: string; text: string }> = {
-    ui: { fill: '#dbeafe', stroke: '#3b82f6', text: '#1e40af' },
-    logic: { fill: '#dcfce7', stroke: '#22c55e', text: '#166534' },
-    api: { fill: '#ffedd5', stroke: '#f97316', text: '#9a3412' },
-    lib: { fill: '#f3f4f6', stroke: '#6b7280', text: '#374151' },
-    other: { fill: '#f5f5f5', stroke: '#a3a3a3', text: '#525252' },
-  }
-
+  // LAYER_COLORS는 lib/colors.ts에서 import됨
   const lines: string[] = ['flowchart TB']
 
   // 순환 의존성에 포함된 노드 집합
@@ -184,11 +178,11 @@ function generateMermaidFromGraph(
   for (const [layer, layerNodes] of Object.entries(layers)) {
     if (layerNodes.length === 0) continue
 
-    const colors = LAYER_COLORS[layer] || LAYER_COLORS.other
+    const colors = LAYER_COLORS[layer as keyof typeof LAYER_COLORS] || LAYER_COLORS.unknown
     lines.push(`  subgraph ${layer}["${layerNames[layer]}"]`)
     lines.push(`    style ${layer} fill:${colors.fill},stroke:${colors.stroke}`)
 
-    for (const node of layerNodes.slice(0, 8)) {
+    for (const node of layerNodes.slice(0, VISUALIZATION_LIMITS.MAX_NODES_DISPLAY)) {
       const safeId = sanitizeNodeId(node)
       const shortName = getShortName(node)
       const isCircular = circularNodes.has(node)
@@ -202,8 +196,8 @@ function generateMermaidFromGraph(
       }
     }
 
-    if (layerNodes.length > 8) {
-      lines.push(`    ${layer}_more["...외 ${layerNodes.length - 8}개"]`)
+    if (layerNodes.length > VISUALIZATION_LIMITS.MAX_NODES_DISPLAY) {
+      lines.push(`    ${layer}_more["...외 ${layerNodes.length - VISUALIZATION_LIMITS.MAX_NODES_DISPLAY}개"]`)
     }
 
     lines.push('  end')
@@ -211,7 +205,7 @@ function generateMermaidFromGraph(
 
   // 연결선 추가 (레이어 간 주요 연결만)
   const addedEdges = new Set<string>()
-  for (const edge of edges.slice(0, 30)) {
+  for (const edge of edges.slice(0, VISUALIZATION_LIMITS.MAX_EDGES_DISPLAY)) {
     const fromLayer = inferLayerFromPath(edge.from)
     const toLayer = inferLayerFromPath(edge.to)
 
@@ -226,7 +220,7 @@ function generateMermaidFromGraph(
   }
 
   // 순환 의존성 연결선 (빨간 점선)
-  for (const cycle of circularDeps.slice(0, 3)) {
+  for (const cycle of circularDeps.slice(0, VISUALIZATION_LIMITS.MAX_CIRCULAR_DEPS_DISPLAY)) {
     if (cycle.length >= 2) {
       const from = inferLayerFromPath(cycle[0])
       const to = inferLayerFromPath(cycle[1])

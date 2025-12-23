@@ -3,7 +3,8 @@
 import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { resolveIssueWithAI, getAvailableModels, type AIModel as APIModel } from '@/lib/api'
+import { resolveIssueWithAI, getAvailableModels } from '@/lib/api'
+import AIRedirectModal from '@/components/ai-redirect/AIRedirectModal'
 
 interface Issue {
   id: number
@@ -11,6 +12,7 @@ interface Issue {
   title: string
   state: 'open' | 'closed'
   labels: string[]
+  body?: string
 }
 
 interface AIModel {
@@ -18,14 +20,16 @@ interface AIModel {
   name: string
   description: string
   status: 'available' | 'unavailable'
+  mode: 'auto' | 'redirect'
+  webUrl?: string
 }
 
-// 기본 모델 (API 연결 실패 시 사용)
+// 기본 모델 (API 연결 실패 시 사용 - 리다이렉트 모드)
 const DEFAULT_MODELS: AIModel[] = [
-  { id: 'claude', name: 'Claude Code', description: 'Anthropic Claude 4.5 Opus', status: 'available' },
-  { id: 'codex', name: 'GPT Codex', description: 'OpenAI GPT 5.1 Codex Max', status: 'available' },
-  { id: 'gemini', name: 'Gemini', description: 'Google Gemini 3.0', status: 'available' },
-  { id: 'qwen', name: 'Qwen', description: 'Alibaba Qwen CLI', status: 'available' },
+  { id: 'claude', name: 'Claude', description: 'Anthropic Claude', status: 'available', mode: 'redirect', webUrl: 'https://claude.ai/new' },
+  { id: 'gpt-4o', name: 'ChatGPT', description: 'OpenAI GPT-4o', status: 'available', mode: 'redirect', webUrl: 'https://chatgpt.com/' },
+  { id: 'gemini', name: 'Gemini', description: 'Google Gemini', status: 'available', mode: 'redirect', webUrl: 'https://gemini.google.com/' },
+  { id: 'qwen', name: 'Qwen', description: 'Alibaba Qwen', status: 'available', mode: 'redirect', webUrl: 'https://tongyi.aliyun.com/qianwen/' },
 ]
 
 // E2E 테스트용 Mock 이슈 데이터
@@ -50,6 +54,7 @@ function ProjectContent() {
   const [aiModels, setAiModels] = useState<AIModel[]>(DEFAULT_MODELS)
   const [resolveResult, setResolveResult] = useState<{ code: string; output: string } | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [showRedirectModal, setShowRedirectModal] = useState(false)
 
   const openIssues = issues.filter(i => i.state === 'open')
   const closedIssues = issues.filter(i => i.state === 'closed')
@@ -92,10 +97,12 @@ function ProjectContent() {
           id: m.id,
           name: m.name,
           description: m.description,
-          status: m.available ? 'available' : 'unavailable'
+          status: m.available ? 'available' : 'unavailable',
+          mode: (m as any).mode || 'redirect',
+          webUrl: (m as any).webUrl,
         })))
       } catch {
-        // API 실패 시 기본 모델 사용
+        // API 실패 시 기본 모델 사용 (리다이렉트 모드)
         setAiModels(DEFAULT_MODELS)
       }
     }
@@ -105,6 +112,15 @@ function ProjectContent() {
   const handleAIResolve = async () => {
     if (!selectedIssue) return
 
+    const currentModel = aiModels.find(m => m.id === selectedModel)
+
+    // 리다이렉트 모드: 모달 표시
+    if (currentModel?.mode === 'redirect') {
+      setShowRedirectModal(true)
+      return
+    }
+
+    // 자동 모드: API 호출
     setIsResolving(true)
     setProgress(0)
     setUsedModel(selectedModel)
@@ -129,16 +145,19 @@ function ProjectContent() {
       setUsedModel(result.model_used)
       setResolveResult({ code: result.code, output: result.output })
     } catch (err) {
-      // API 실패 시 Mock 모드로 폴백 (E2E 테스트용 빠른 진행)
-      console.warn('API call failed, using mock mode:', err)
-      for (let i = 0; i <= 100; i += 25) {
-        await new Promise(r => setTimeout(r, 100))
-        setProgress(i)
-      }
-      setResolveResult({ code: '- old code\n+ new code', output: 'Mock resolution completed' })
+      // API 실패 시 리다이렉트 모달로 폴백
+      console.warn('API call failed, falling back to redirect mode:', err)
+      setShowRedirectModal(true)
     } finally {
       setIsResolving(false)
     }
+  }
+
+  // 리다이렉트 모달에서 결과 받기
+  const handleRedirectResult = (result: { code: string; output: string }) => {
+    setResolveResult(result)
+    setProgress(100)
+    setUsedModel(selectedModel)
   }
 
   return (
@@ -259,6 +278,22 @@ function ProjectContent() {
           )}
         </section>
       </div>
+
+      {/* AI 리다이렉트 모달 */}
+      {selectedIssue && (
+        <AIRedirectModal
+          isOpen={showRedirectModal}
+          onClose={() => setShowRedirectModal(false)}
+          issue={{
+            number: selectedIssue.number,
+            title: selectedIssue.title,
+            body: selectedIssue.body,
+            labels: selectedIssue.labels,
+          }}
+          selectedModel={selectedModel}
+          onResult={handleRedirectResult}
+        />
+      )}
     </main>
   )
 }

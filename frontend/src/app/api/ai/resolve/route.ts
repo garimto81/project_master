@@ -23,7 +23,12 @@ async function callAI(model: string, prompt: string): Promise<{ code: string; ou
     case 'gpt-4o':
     case 'gpt4':
     case 'openai':
+    case 'codex':
       return callOpenAI(prompt)
+    case 'gemini':
+      return callGemini(prompt)
+    case 'qwen':
+      return callQwen(prompt)
     default:
       throw new Error(`지원하지 않는 모델: ${model}`)
   }
@@ -107,6 +112,99 @@ async function callOpenAI(prompt: string): Promise<{ code: string; output: strin
 
   const data = await response.json()
   const content = data.choices[0]?.message?.content || ''
+
+  // 코드 블록 추출
+  const codeMatch = content.match(/```[\w]*\n([\s\S]*?)```/)
+  const code = codeMatch ? codeMatch[1].trim() : ''
+
+  return {
+    code,
+    output: content,
+  }
+}
+
+// Google Gemini API 호출
+async function callGemini(prompt: string): Promise<{ code: string; output: string }> {
+  const apiKey = process.env.GOOGLE_API_KEY
+
+  if (!apiKey) {
+    throw new Error('GOOGLE_API_KEY가 설정되지 않았습니다')
+  }
+
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        contents: [
+          {
+            parts: [{ text: prompt }],
+          },
+        ],
+        generationConfig: {
+          maxOutputTokens: 4096,
+        },
+      }),
+    }
+  )
+
+  if (!response.ok) {
+    const error = await response.text()
+    throw new Error(`Gemini API 오류: ${error}`)
+  }
+
+  const data = await response.json()
+  const content = data.candidates?.[0]?.content?.parts?.[0]?.text || ''
+
+  // 코드 블록 추출
+  const codeMatch = content.match(/```[\w]*\n([\s\S]*?)```/)
+  const code = codeMatch ? codeMatch[1].trim() : ''
+
+  return {
+    code,
+    output: content,
+  }
+}
+
+// Alibaba Qwen API 호출 (DashScope)
+async function callQwen(prompt: string): Promise<{ code: string; output: string }> {
+  const apiKey = process.env.DASHSCOPE_API_KEY
+
+  if (!apiKey) {
+    throw new Error('DASHSCOPE_API_KEY가 설정되지 않았습니다')
+  }
+
+  const response = await fetch(
+    'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'qwen-plus',
+        messages: [
+          {
+            role: 'user',
+            content: prompt,
+          },
+        ],
+        max_tokens: 4096,
+      }),
+    }
+  )
+
+  if (!response.ok) {
+    const error = await response.text()
+    throw new Error(`Qwen API 오류: ${error}`)
+  }
+
+  const data = await response.json()
+  const content = data.choices?.[0]?.message?.content || ''
 
   // 코드 블록 추출
   const codeMatch = content.match(/```[\w]*\n([\s\S]*?)```/)

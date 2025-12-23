@@ -38,7 +38,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Frontend (Primary)
 
-```bash
+```powershell
 cd frontend
 npm run dev          # 개발 서버 (http://localhost:3000)
 npm run build        # 프로덕션 빌드
@@ -47,17 +47,24 @@ npm run lint         # ESLint
 
 ### E2E Tests (Playwright)
 
-```bash
+```powershell
 cd frontend
-npx playwright test                          # 전체 테스트
+npm run test:e2e                             # 전체 테스트 (또는 npx playwright test)
+npm run test:e2e:ui                          # UI 모드
 npx playwright test tests/e2e/login.spec.ts  # 단일 파일
-npx playwright test --ui                     # UI 모드
-SKIP_WEB_SERVER=true npx playwright test     # 서버 재시작 없이
+
+# 서버가 이미 실행 중일 때 (PowerShell)
+$env:SKIP_WEB_SERVER="true"; npx playwright test
 ```
+
+테스트 설정:
+- Timeout: 60초 (테스트), 30초 (expect)
+- webServer: 자동 `npm run dev` 실행 (120초 timeout)
+- 브라우저: Chromium only
 
 ### Backend (레거시)
 
-```bash
+```powershell
 cd backend
 ruff check src/ --fix
 pytest tests/ -v
@@ -67,47 +74,60 @@ pytest tests/ -v
 
 ### Authentication Flow
 
-1. **Client** (`supabase.ts`): `createBrowserClient`로 OAuth 시작
-2. **Callback** (`/auth/callback/page.tsx`): 세션 교환 처리
-3. **Server** (`auth.ts`): `createServerClient` + cookies로 API 인증
-4. GitHub 토큰은 Supabase `session.provider_token`에 자동 저장
-
 ```
 signInWithGitHub() → GitHub OAuth → /auth/callback → getGitHubTokenFromSession()
 ```
 
+**파일 역할:**
+- `supabase.ts`: 클라이언트 측 `createBrowserClient` + OAuth 헬퍼
+- `auth.ts`: 서버 측 `createServerClient` + `requireAuth()` 미들웨어
+- `/auth/callback/page.tsx`: OAuth 콜백 세션 교환
+
+GitHub 토큰은 Supabase `session.provider_token`에 자동 저장.
+
 ### Code Visualization System (PRD v6.3)
 
-다층 시각화 시스템:
+다층 시각화 시스템 - skott 기반 AST 분석:
 - **Level 0**: 레포 목록 (`/api/logic-flow/repos`)
-- **Level 1-A**: 큰 그림 - 데이터 흐름 (`/api/logic-flow/analyze`)
-- **Level 1-B**: 레이어별 모듈 목록
+- **Level 1-A**: 데이터 흐름 (`/api/logic-flow/analyze`) - import/export 추적
+- **Level 1-B**: 레이어별 모듈 목록 (UI/Logic/API/Data/Lib)
 - **Level 2**: 모듈 상세 (`/api/logic-flow/module`)
 - **Level 3**: 함수 실행 흐름 (`/api/logic-flow/trace`)
 
-`skott-analyzer.ts`: AST 기반 의존성 분석 (로컬 프로젝트용)
+**핵심 파일:**
+- `skott-analyzer.ts`: AST 기반 의존성 분석, 순환 의존성 탐지
+- `MermaidDiagram.tsx`: 레이어별 색상, 줌/팬, 순환 의존성 강조
 
-### State Management
-
-Zustand 사용 (설정 시). 현재 대부분 React useState 기반.
-
-## API Routes Structure
+## API Routes
 
 ```
 frontend/src/app/api/
 ├── auth/
 │   ├── callback/route.ts  # OAuth 콜백
 │   └── me/route.ts        # 현재 사용자
-├── repositories/          # GitHub 레포 목록
+├── health/route.ts        # 헬스체크
+├── models/route.ts        # AI 모델 목록
+├── repositories/          # GitHub 레포 CRUD
+│   └── [owner]/[repo]/    # 특정 레포 조회
 ├── issues/                # 이슈 CRUD
+│   └── [number]/          # 이슈 상세/close/reopen
 ├── ai/resolve/            # AI 이슈 해결
 └── logic-flow/
     ├── repos/route.ts     # 레포 목록 + Mermaid
-    ├── analyze/route.ts   # 코드 분석 (import 파싱, 순환 탐지)
+    ├── analyze/route.ts   # 코드 분석 (순환 탐지 포함)
     ├── module/route.ts    # 모듈 상세
     ├── trace/route.ts     # 함수 실행 흐름
     └── overview/route.ts  # 전체 개요
 ```
+
+## Testing Conventions
+
+E2E 테스트 파일: `frontend/tests/e2e/*.spec.ts`
+
+**data-testid 패턴:**
+- 페이지: `login-page`, `dashboard`, `project-page`
+- 버튼: `github-login-btn`, `logout-btn`
+- 컨테이너: `mermaid-container`, `logic-flow-viewer`
 
 ## Environment Variables
 
@@ -123,9 +143,10 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGci...
 - 절대 경로 사용
 - 새 API는 `frontend/src/app/api/`에 구현
 - Playwright E2E 테스트 필수
-- Mermaid 다이어그램은 `MermaidDiagram` 컴포넌트 사용 (SSR 비활성화)
+- Mermaid 다이어그램은 `MermaidDiagram` 컴포넌트 사용 (`'use client'`)
 
 ## Docs
 
 - PRD: `tasks/prds/0005-prd-devflow-ai-collaboration.md`
 - Supabase 설정: `frontend/docs/SUPABASE_SETUP.md`
+- 테스트 계획: `tasks/prds/0004-tdd-test-plan.md`

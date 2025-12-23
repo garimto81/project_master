@@ -14,17 +14,10 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react'
 import mermaid from 'mermaid'
+import { LAYER_COLORS, VISUALIZATION_LIMITS } from '@/lib/colors'
 
-// 레이어별 색상 테마
-export const LAYER_COLORS = {
-  ui: { fill: '#dbeafe', stroke: '#3b82f6', text: '#1e40af' },
-  logic: { fill: '#dcfce7', stroke: '#22c55e', text: '#166534' },
-  server: { fill: '#ffedd5', stroke: '#f97316', text: '#9a3412' },
-  api: { fill: '#ffedd5', stroke: '#f97316', text: '#9a3412' },
-  data: { fill: '#e0e7ff', stroke: '#6366f1', text: '#3730a3' },
-  lib: { fill: '#f3f4f6', stroke: '#6b7280', text: '#374151' },
-  other: { fill: '#f5f5f5', stroke: '#a3a3a3', text: '#525252' },
-}
+// 하위 호환성을 위한 re-export
+export { LAYER_COLORS } from '@/lib/colors'
 
 interface MermaidDiagramProps {
   chart: string
@@ -146,7 +139,7 @@ export default function MermaidDiagram({
       if (!enableZoom) return
       e.preventDefault()
       const delta = e.deltaY > 0 ? -0.1 : 0.1
-      setZoom((prev) => Math.min(Math.max(prev + delta, 0.5), 3))
+      setZoom((prev) => Math.min(Math.max(prev + delta, VISUALIZATION_LIMITS.ZOOM_MIN), VISUALIZATION_LIMITS.ZOOM_MAX))
     },
     [enableZoom]
   )
