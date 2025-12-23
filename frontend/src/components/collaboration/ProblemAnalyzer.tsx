@@ -6,8 +6,7 @@
  */
 
 import { useState, useMemo } from 'react'
-import { AnalysisResult, RiskPoint, CircularDependency } from '@/lib/types'
-import { LAYER_COLORS_EXTENDED, LAYER_NAMES, LayerType } from '@/lib/colors'
+import { AnalysisResult, RiskPoint } from '@/lib/types'
 
 interface ProblemAnalyzerProps {
   analysisResult: AnalysisResult

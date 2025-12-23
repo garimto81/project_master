@@ -91,7 +91,7 @@ export async function getGitHubToken(): Promise<string | null> {
 /**
  * 인증 상태 변경 리스너
  */
-export function onAuthStateChange(callback: (event: string, session: any) => void) {
+export function onAuthStateChange(callback: (event: string, session: unknown) => void) {
   if (!supabase) {
     // 더미 구독 객체 반환 (테스트/개발 환경용)
     return { data: { subscription: { unsubscribe: () => {} } } }

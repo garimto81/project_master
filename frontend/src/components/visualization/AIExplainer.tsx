@@ -116,7 +116,7 @@ export function AIExplainer({
             : e
         )
       )
-    } catch (error) {
+    } catch {
       setExplanations(prev =>
         prev.map(e =>
           e.id === id

@@ -10,6 +10,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getGitHubTokenFromSession } from '@/lib/auth'
 
+interface GitHubIssue {
+  id: number
+  number: number
+  title: string
+  state: string
+  labels: Array<{ name: string }>
+  body: string | null
+  pull_request?: unknown
+}
+
 export async function GET(request: NextRequest) {
   try {
     // 인증 확인 (사용자별 GitHub 토큰)
@@ -53,17 +63,17 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const issuesData = await response.json()
+    const issuesData = await response.json() as GitHubIssue[]
 
     // PR 제외하고 이슈만 필터링
     const issues = issuesData
-      .filter((issue: any) => !issue.pull_request)
-      .map((issue: any) => ({
+      .filter((issue) => !issue.pull_request)
+      .map((issue) => ({
         id: issue.id,
         number: issue.number,
         title: issue.title,
         state: issue.state,
-        labels: issue.labels.map((label: any) => label.name),
+        labels: issue.labels.map((label) => label.name),
         body: issue.body,
       }))
 

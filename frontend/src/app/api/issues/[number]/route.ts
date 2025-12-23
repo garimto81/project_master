@@ -10,6 +10,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getGitHubTokenFromSession } from '@/lib/auth'
 
+interface GitHubIssue {
+  id: number
+  number: number
+  title: string
+  state: string
+  labels: Array<{ name: string }>
+  body: string | null
+}
+
 interface Params {
   params: Promise<{
     number: string
@@ -60,14 +69,14 @@ export async function GET(request: NextRequest, { params }: Params) {
       )
     }
 
-    const issue = await response.json()
+    const issue = await response.json() as GitHubIssue
 
     return NextResponse.json({
       id: issue.id,
       number: issue.number,
       title: issue.title,
       state: issue.state,
-      labels: issue.labels.map((label: any) => label.name),
+      labels: issue.labels.map((label) => label.name),
       body: issue.body,
     })
   } catch (error) {

@@ -5,8 +5,8 @@
  * 코드 에디터와 다이어그램 간의 양방향 동기화
  */
 
-import { useState, useCallback, useEffect, useRef } from 'react'
-import { AnalysisResult, ModuleInfo, FunctionInfo } from '@/lib/types'
+import { useState, useCallback, useRef } from 'react'
+import { AnalysisResult } from '@/lib/types'
 import { LAYER_COLORS_EXTENDED, LAYER_NAMES, LayerType } from '@/lib/colors'
 
 interface CodeSyncProps {
@@ -15,7 +15,6 @@ interface CodeSyncProps {
   selectedPath?: string
   onPathSelect?: (path: string) => void
   onLineSelect?: (line: number) => void
-  onDiagramNodeClick?: (nodeId: string) => void
 }
 
 interface CodeLine {
@@ -41,7 +40,6 @@ export function CodeSync({
   selectedPath,
   onPathSelect,
   onLineSelect,
-  onDiagramNodeClick,
 }: CodeSyncProps) {
   const [syncState, setSyncState] = useState<SyncState>({
     mode: 'bidirectional',
@@ -120,7 +118,7 @@ export function CodeSync({
         <div className="absolute inset-0 bg-gradient-to-b from-gray-50 to-gray-100"></div>
 
         {/* 함수 영역 표시 */}
-        {moduleRanges.map((range, index) => (
+        {moduleRanges.map((range) => (
           <div
             key={range.name}
             className="absolute left-1 right-1 opacity-60"

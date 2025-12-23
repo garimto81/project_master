@@ -6,7 +6,7 @@
  */
 
 import { useState, useMemo } from 'react'
-import { AnalysisResult, Connection } from '@/lib/types'
+import { AnalysisResult } from '@/lib/types'
 import { LAYER_COLORS_EXTENDED, LAYER_NAMES, LayerType } from '@/lib/colors'
 
 interface VersionCompareProps {

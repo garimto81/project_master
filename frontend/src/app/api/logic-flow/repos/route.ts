@@ -8,6 +8,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getGitHubTokenFromSession } from '@/lib/auth'
 
+interface GitHubRepoResponse {
+  name: string
+  full_name: string
+  description: string | null
+  language: string | null
+  stargazers_count: number
+  open_issues_count: number
+  updated_at: string
+  visibility?: string
+  private: boolean
+}
+
 interface Repository {
   name: string
   full_name: string
@@ -65,7 +77,7 @@ export async function GET(request: NextRequest) {
     const reposData = await reposResponse.json()
 
     // 레포지토리 목록 변환
-    const repositories: Repository[] = reposData.map((repo: any) => ({
+    const repositories: Repository[] = (reposData as GitHubRepoResponse[]).map((repo) => ({
       name: repo.name,
       full_name: repo.full_name,
       description: repo.description,
@@ -73,7 +85,7 @@ export async function GET(request: NextRequest) {
       stars: repo.stargazers_count,
       open_issues: repo.open_issues_count,
       updated_at: repo.updated_at,
-      visibility: repo.visibility || (repo.private ? 'private' : 'public'),
+      visibility: (repo.visibility || (repo.private ? 'private' : 'public')) as 'public' | 'private',
     }))
 
     // 언어 목록 추출

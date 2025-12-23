@@ -13,7 +13,7 @@ interface Step {
   node: string
   label: string
   type: 'start' | 'action' | 'decision' | 'process' | 'end' | 'error'
-  data: Record<string, any> | null
+  data: Record<string, unknown> | null
   source_line?: number
 }
 
@@ -66,7 +66,7 @@ export async function POST(request: NextRequest) {
 
     // Mermaid 다이어그램 생성
     const mermaidLines = ['flowchart TB']
-    steps.forEach((step, i) => {
+    steps.forEach((step) => {
       const shape = step.type === 'decision' ? `{${step.label}}` :
                    step.type === 'start' || step.type === 'end' ? `([${step.label}])` :
                    step.type === 'error' ? `[/${step.label}/]` :
@@ -116,7 +116,7 @@ export async function POST(request: NextRequest) {
 /**
  * 코드에서 실행 흐름 분석 (간단한 휴리스틱)
  */
-function analyzeCodeFlow(funcName: string, code: string, inputExample?: Record<string, any>): Step[] {
+function analyzeCodeFlow(funcName: string, code: string, inputExample?: Record<string, unknown>): Step[] {
   const steps: Step[] = []
   let stepOrder = 1
 

@@ -61,7 +61,7 @@ export async function getGitHubTokenFromSession(): Promise<{
 
   if (supabase) {
     try {
-      const { data: { session }, error } = await supabase.auth.getSession()
+      const { data: { session } } = await supabase.auth.getSession()
 
       if (session?.provider_token) {
         // GitHub 사용자 정보 가져오기
