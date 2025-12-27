@@ -73,14 +73,6 @@ export default function AIRedirectModal({
     setStep('result')
   }, [pastedResponse])
 
-  const handleConfirm = useCallback(() => {
-    if (extractedResult) {
-      onResult(extractedResult)
-      handleReset()
-      onClose()
-    }
-  }, [extractedResult, onResult, onClose])
-
   const handleReset = useCallback(() => {
     setStep('prompt')
     setCopied(false)
@@ -88,6 +80,14 @@ export default function AIRedirectModal({
     setPastedResponse('')
     setExtractedResult(null)
   }, [])
+
+  const handleConfirm = useCallback(() => {
+    if (extractedResult) {
+      onResult(extractedResult)
+      handleReset()
+      onClose()
+    }
+  }, [extractedResult, onResult, onClose, handleReset])
 
   const handleClose = useCallback(() => {
     handleReset()

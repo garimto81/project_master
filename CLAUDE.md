@@ -150,3 +150,27 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGci...
 - PRD: `tasks/prds/0005-prd-devflow-ai-collaboration.md`
 - Supabase 설정: `frontend/docs/SUPABASE_SETUP.md`
 - 테스트 계획: `tasks/prds/0004-tdd-test-plan.md`
+
+## Additional Architecture Notes
+
+### API Client Structure
+
+- `src/lib/api.ts`: 레거시 FastAPI 클라이언트 (localhost:8000) - 사용 비권장
+- 새 API 호출: Next.js API Routes (`/api/*`)를 직접 fetch
+
+### Layer Classification (Code Visualization)
+
+`skott-analyzer.ts`에서 사용하는 레이어 분류:
+
+| 레이어 | 파일 패턴 |
+|--------|-----------|
+| ui | components, pages, app/, .tsx/.jsx |
+| api | api/, route, server |
+| lib | lib/, util, helper |
+| logic | hook, service, store |
+| other | 위에 해당 없음 |
+
+### Key Components
+
+- `MermaidDiagram.tsx`: 'use client' 컴포넌트, `VISUALIZATION_LIMITS` 적용
+- `skott-analyzer.ts`: 서버 전용 (Node.js 환경)

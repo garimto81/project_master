@@ -15,7 +15,7 @@ interface Step {
   node: string
   label: string
   type: 'start' | 'action' | 'decision' | 'process' | 'end' | 'error'
-  data: Record<string, any> | null
+  data: Record<string, unknown> | null
   source_line?: number
 }
 
@@ -23,7 +23,7 @@ interface StepPlayerProps {
   repo: string
   functionName: string
   path?: string
-  inputExample?: Record<string, any>
+  inputExample?: Record<string, unknown>
   onStepChange?: (step: Step, index: number) => void
   autoPlay?: boolean
   speed?: 'slow' | 'normal' | 'fast'
@@ -79,9 +79,9 @@ export default function StepPlayer({
       setSteps(data.steps || [])
       setMermaidCode(data.mermaid_code || '')
       setCurrentStepIndex(0)
-    } catch (err: any) {
+    } catch (err) {
       console.error('Load trace error:', err)
-      setError(err.message || '실행 흐름을 불러올 수 없습니다')
+      setError(err instanceof Error ? err.message : '실행 흐름을 불러올 수 없습니다')
     } finally {
       setLoading(false)
     }
@@ -93,10 +93,12 @@ export default function StepPlayer({
 
   // 현재 스텝에 맞춰 다이어그램 업데이트
   useEffect(() => {
-    if (steps.length === 0) return
+    if (steps.length === 0 || !mermaidCode) return
 
     const currentStep = steps[currentStepIndex]
-    onStepChange?.(currentStep, currentStepIndex)
+    if (onStepChange) {
+      onStepChange(currentStep, currentStepIndex)
+    }
 
     // 현재 노드 하이라이트
     const updatedCode = mermaidCode
@@ -112,7 +114,8 @@ export default function StepPlayer({
     } else {
       setMermaidCode(updatedCode)
     }
-  }, [currentStepIndex, steps])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentStepIndex, steps.length])
 
   // 자동 재생
   useEffect(() => {

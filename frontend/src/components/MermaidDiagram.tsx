@@ -13,8 +13,17 @@
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react'
-import mermaid from 'mermaid'
 import { LAYER_COLORS, VISUALIZATION_LIMITS } from '@/lib/colors'
+
+// Mermaid 동적 import (번들 사이즈 최적화)
+let mermaidInstance: typeof import('mermaid').default | null = null
+async function getMermaid() {
+  if (!mermaidInstance) {
+    const mod = await import('mermaid')
+    mermaidInstance = mod.default
+  }
+  return mermaidInstance
+}
 
 // 하위 호환성을 위한 re-export
 export { LAYER_COLORS } from '@/lib/colors'
@@ -73,35 +82,37 @@ export default function MermaidDiagram({
   }, [chart])
 
   useEffect(() => {
-    // Mermaid 초기화
-    if (!initialized) {
-      mermaid.initialize({
-        startOnLoad: false,
-        theme: 'base',
-        securityLevel: 'loose',
-        flowchart: {
-          useMaxWidth: false,
-          htmlLabels: true,
-          curve: 'basis',
-          padding: 20,
-          nodeSpacing: 50,
-          rankSpacing: 50,
-        },
-        themeVariables: {
-          primaryColor: LAYER_COLORS.ui.fill,
-          primaryBorderColor: LAYER_COLORS.ui.stroke,
-          primaryTextColor: LAYER_COLORS.ui.text,
-          lineColor: '#94a3b8',
-          fontSize: '14px',
-        },
-      })
-      initialized = true
-    }
-
     const renderDiagram = async () => {
       if (!containerRef.current) return
 
       try {
+        // Mermaid 동적 로드 및 초기화
+        const mermaid = await getMermaid()
+
+        if (!initialized) {
+          mermaid.initialize({
+            startOnLoad: false,
+            theme: 'base',
+            securityLevel: 'loose',
+            flowchart: {
+              useMaxWidth: false,
+              htmlLabels: true,
+              curve: 'basis',
+              padding: 20,
+              nodeSpacing: 50,
+              rankSpacing: 50,
+            },
+            themeVariables: {
+              primaryColor: LAYER_COLORS.ui.fill,
+              primaryBorderColor: LAYER_COLORS.ui.stroke,
+              primaryTextColor: LAYER_COLORS.ui.text,
+              lineColor: '#94a3b8',
+              fontSize: '14px',
+            },
+          })
+          initialized = true
+        }
+
         // 고유 ID 생성
         const uniqueId = `${id}-${Date.now()}`
 

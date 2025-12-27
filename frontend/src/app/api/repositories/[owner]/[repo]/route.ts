@@ -11,6 +11,21 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getGitHubTokenFromSession } from '@/lib/auth'
 
+interface GitHubCommit {
+  sha: string
+  commit: {
+    message: string
+    author?: {
+      name?: string
+      date?: string
+    }
+  }
+}
+
+interface GitHubBranch {
+  name: string
+}
+
 interface Params {
   params: Promise<{
     owner: string
@@ -120,13 +135,13 @@ export async function GET(request: NextRequest, { params }: Params) {
       visibility: repoData.visibility,
       readme_content: readmeContent,
       languages,
-      recent_commits: commits.map((commit: any) => ({
+      recent_commits: (commits as GitHubCommit[]).map((commit) => ({
         sha: commit.sha.substring(0, 7),
         message: commit.commit.message.split('\n')[0],
         author: commit.commit.author?.name || 'Unknown',
         date: commit.commit.author?.date || '',
       })),
-      branches: branches.map((branch: any) => branch.name),
+      branches: (branches as GitHubBranch[]).map((branch) => branch.name),
       contributors_count: contributorsCount,
     }
 

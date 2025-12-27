@@ -70,9 +70,9 @@ export default function LogicFlowViewer({
       setModules(data.modules || [])
       setMermaidCode(data.mermaid_code || '')
       setBreadcrumb([repo])
-    } catch (err: any) {
+    } catch (err) {
       console.error('Load overview error:', err)
-      setError(err.message || '프로젝트 구조를 불러올 수 없습니다')
+      setError(err instanceof Error ? err.message : '프로젝트 구조를 불러올 수 없습니다')
     } finally {
       setLoading(false)
     }
@@ -98,9 +98,9 @@ export default function LogicFlowViewer({
       setMermaidCode(data.mermaid_code || '')
       setCurrentModule(moduleName)
       setBreadcrumb([repo, moduleName])
-    } catch (err: any) {
+    } catch (err) {
       console.error('Load module error:', err)
-      setError(err.message || '모듈 정보를 불러올 수 없습니다')
+      setError(err instanceof Error ? err.message : '모듈 정보를 불러올 수 없습니다')
     } finally {
       setLoading(false)
     }

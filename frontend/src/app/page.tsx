@@ -33,7 +33,8 @@ const LANGUAGE_COLORS: Record<string, string> = {
 export default function HomePage() {
   const router = useRouter()
   const [isLoggedIn, setIsLoggedIn] = useState(false)
-  const [isCheckingAuth, setIsCheckingAuth] = useState(true)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [_isCheckingAuth, setIsCheckingAuth] = useState(true)
   const [repositories, setRepositories] = useState<Repository[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')

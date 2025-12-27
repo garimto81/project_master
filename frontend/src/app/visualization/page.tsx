@@ -28,11 +28,6 @@ const InteractiveFlowDiagram = dynamic(
   { ssr: false }
 )
 
-const LogicFlowViewer = dynamic(
-  () => import('@/components/logic-flow/LogicFlowViewer'),
-  { ssr: false }
-)
-
 const StepPlayer = dynamic(
   () => import('@/components/logic-flow/StepPlayer'),
   { ssr: false }
@@ -119,7 +114,7 @@ function VisualizationContent() {
 
   // 상태 관리
   const [viewLevel, setViewLevel] = useState<ViewLevel>(repoParam ? 'big-picture' : 'repos')
-  const [owner, setOwner] = useState(ownerParam)
+  const [owner] = useState(ownerParam)
   const [selectedRepo, setSelectedRepo] = useState<string | null>(repoParam)
   const [selectedLayer, setSelectedLayer] = useState<string | null>(null)
   const [selectedModule, setSelectedModule] = useState<string | null>(null)
@@ -127,7 +122,6 @@ function VisualizationContent() {
 
   // 데이터 상태
   const [repos, setRepos] = useState<Repository[]>([])
-  const [reposMermaid, setReposMermaid] = useState<string>('')
   const [analyzeData, setAnalyzeData] = useState<AnalyzeData | null>(null)
   const [moduleFunctions, setModuleFunctions] = useState<FunctionInfo[]>([])
   const [moduleMermaid, setModuleMermaid] = useState<string>('')
@@ -168,9 +162,9 @@ function VisualizationContent() {
       }
       const data = await res.json()
       setRepos(data.repositories || [])
-      setReposMermaid(data.mermaid_code || '')
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err) {
+      const error = err as Error
+      setError(error.message)
     } finally {
       setLoading(false)
     }
@@ -204,9 +198,10 @@ function VisualizationContent() {
       }
 
       setAnalyzeData(data)
-    } catch (err: any) {
-      console.error('loadAnalyze error:', err)
-      setError(err.message || '알 수 없는 오류가 발생했습니다.')
+    } catch (err) {
+      const error = err as Error
+      console.error('loadAnalyze error:', error)
+      setError(error.message || '알 수 없는 오류가 발생했습니다.')
     } finally {
       setLoading(false)
     }
@@ -227,8 +222,9 @@ function VisualizationContent() {
       const data = await res.json()
       setModuleFunctions(data.functions || [])
       setModuleMermaid(data.mermaid_code || '')
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err) {
+      const error = err as Error
+      setError(error.message)
     } finally {
       setLoading(false)
     }

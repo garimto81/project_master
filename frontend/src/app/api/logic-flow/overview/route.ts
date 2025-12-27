@@ -8,6 +8,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getGitHubTokenFromSession } from '@/lib/auth'
 
+interface GitHubIssue {
+  title: string
+  body?: string
+}
+
 interface Module {
   name: string
   path: string
@@ -111,7 +116,7 @@ export async function GET(request: NextRequest) {
         current.files++
 
         // 버그 이슈가 해당 모듈과 관련 있는지 확인
-        const hasRelatedBug = issues.some((issue: any) =>
+        const hasRelatedBug = (issues as GitHubIssue[]).some((issue) =>
           issue.title.toLowerCase().includes(moduleName.toLowerCase()) ||
           issue.body?.toLowerCase().includes(moduleName.toLowerCase())
         )

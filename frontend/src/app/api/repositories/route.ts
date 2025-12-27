@@ -11,7 +11,19 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getGitHubTokenFromSession } from '@/lib/auth'
 
-export async function GET(request: NextRequest) {
+interface GitHubRepo {
+  id: number
+  name: string
+  full_name: string
+  description: string | null
+  language: string | null
+  open_issues_count: number
+  stargazers_count: number
+  updated_at: string
+}
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export async function GET(_request: NextRequest) {
   try {
     // 인증 확인 (사용자별 GitHub 토큰)
     const { token, user, error } = await getGitHubTokenFromSession()
@@ -29,7 +41,7 @@ export async function GET(request: NextRequest) {
     console.log(`[API] /api/repositories - 요청 사용자: ${user.login}`)
 
     // 페이지네이션으로 전체 레포 가져오기
-    const allRepos: any[] = []
+    const allRepos: GitHubRepo[] = []
     let page = 1
     const perPage = 100
 
@@ -48,7 +60,7 @@ export async function GET(request: NextRequest) {
         throw new Error(`GitHub API 오류: ${response.status}`)
       }
 
-      const repos = await response.json()
+      const repos = await response.json() as GitHubRepo[]
 
       if (repos.length === 0) {
         break
@@ -64,7 +76,7 @@ export async function GET(request: NextRequest) {
     }
 
     // 응답 형식 변환 (FastAPI 응답과 호환)
-    const repositories = allRepos.map((repo: any) => ({
+    const repositories = allRepos.map((repo) => ({
       id: repo.id,
       name: repo.name,
       full_name: repo.full_name,

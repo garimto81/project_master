@@ -12,7 +12,7 @@
  * - 줌/팬 지원
  */
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef } from 'react'
 
 interface Layer {
   name: string
@@ -129,12 +129,12 @@ export default function InteractiveFlowDiagram({
     setPan({ x: 0, y: 0 })
   }
 
-  // 레이어 위치 계산
-  const getLayerPosition = (index: number, total: number) => {
-    const baseY = 80
-    const spacing = 140
-    return { x: 50, y: baseY + index * spacing }
-  }
+  // 레이어 위치 계산 (향후 사용 예정)
+  // const getLayerPosition = (index: number, total: number) => {
+  //   const baseY = 80
+  //   const spacing = 140
+  //   return { x: 50, y: baseY + index * spacing }
+  // }
 
   return (
     <div

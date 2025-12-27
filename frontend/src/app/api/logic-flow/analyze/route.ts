@@ -51,6 +51,26 @@ interface AnalysisStats {
   unusedCount: number
 }
 
+// GitHub API 응답 타입
+interface GitHubTreeItem {
+  path: string
+  type: string
+  sha?: string
+  size?: number
+}
+
+interface GitHubTreeResponse {
+  tree: GitHubTreeItem[]
+  truncated?: boolean
+}
+
+interface GitHubIssue {
+  number: number
+  title: string
+  body: string | null
+  labels: Array<{ name: string }>
+}
+
 interface AnalyzeResponse {
   repo: string
   level: 'overview'
@@ -354,7 +374,7 @@ export async function POST(request: NextRequest) {
     const [owner, repoName] = repo.split('/')
 
     // 1. 레포지토리 트리 가져오기
-    let treeData: any = { tree: [] }
+    let treeData: GitHubTreeResponse = { tree: [] }
     const branches = ['main', 'master']
 
     for (const branch of branches) {
@@ -395,7 +415,7 @@ export async function POST(request: NextRequest) {
       data: [],
     }
 
-    const codeFiles = (treeData.tree || []).filter((item: any) =>
+    const codeFiles = (treeData.tree || []).filter((item: GitHubTreeItem) =>
       item.type === 'blob' &&
       item.path.startsWith(path.replace(/^\//, '')) &&
       (item.path.endsWith('.ts') || item.path.endsWith('.tsx') ||
@@ -512,7 +532,7 @@ export async function POST(request: NextRequest) {
               allImports.push(...fileImports)
             }
           }
-        } catch (e) {
+        } catch {
           // 개별 파일 분석 실패는 무시
         }
       }
@@ -528,10 +548,10 @@ export async function POST(request: NextRequest) {
 
     // v6.3: 미사용 파일 탐지
     const entryPoints = codeFiles
-      .filter((f: any) => f.path.includes('page.') || f.path.includes('route.') || f.path.includes('index.'))
-      .map((f: any) => f.path)
+      .filter((f: GitHubTreeItem) => f.path.includes('page.') || f.path.includes('route.') || f.path.includes('index.'))
+      .map((f: GitHubTreeItem) => f.path)
     const unusedFiles = detectUnusedFiles(
-      codeFiles.map((f: any) => f.path),
+      codeFiles.map((f: GitHubTreeItem) => f.path),
       allImports,
       entryPoints
     )
@@ -566,7 +586,7 @@ export async function POST(request: NextRequest) {
     )]
 
     // 7. 이슈 정보 변환 및 레이어 연결
-    const issues = issuesData.slice(0, 10).map((issue: any) => {
+    const issues = issuesData.slice(0, 10).map((issue: GitHubIssue) => {
       let relatedLayer: string | undefined
 
       const titleLower = issue.title.toLowerCase()
@@ -583,7 +603,7 @@ export async function POST(request: NextRequest) {
       return {
         number: issue.number,
         title: issue.title,
-        labels: issue.labels.map((l: any) => l.name),
+        labels: issue.labels.map((l: { name: string }) => l.name),
         related_layer: relatedLayer,
       }
     })
@@ -615,7 +635,6 @@ export async function POST(request: NextRequest) {
 
     // 레이어 서브그래프 (색상 적용)
     for (const layer of layers) {
-      const hasIssue = issues.some((i: any) => i.related_layer === layer.name)
       const colors = LAYER_COLORS[layer.name] || LAYER_COLORS.logic
 
       mermaidLines.push(`  subgraph ${layer.name}["${layer.displayName}"]`)

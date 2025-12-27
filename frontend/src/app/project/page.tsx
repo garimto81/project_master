@@ -24,6 +24,14 @@ interface AIModel {
   webUrl?: string
 }
 
+interface GitHubIssueResponse {
+  id: number
+  number: number
+  title: string
+  state: string
+  labels: Array<string | { name: string }>
+}
+
 // 기본 모델 (API 연결 실패 시 사용 - 리다이렉트 모드)
 const DEFAULT_MODELS: AIModel[] = [
   { id: 'claude', name: 'Claude', description: 'Anthropic Claude', status: 'available', mode: 'redirect', webUrl: 'https://claude.ai/new' },
@@ -53,7 +61,8 @@ function ProjectContent() {
   const [usedModel, setUsedModel] = useState<string | null>(null)
   const [aiModels, setAiModels] = useState<AIModel[]>(DEFAULT_MODELS)
   const [resolveResult, setResolveResult] = useState<{ code: string; output: string } | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [_error, setError] = useState<string | null>(null)
   const [showRedirectModal, setShowRedirectModal] = useState(false)
 
   const openIssues = issues.filter(i => i.state === 'open')
@@ -73,12 +82,12 @@ function ProjectContent() {
         const res = await fetch(`/api/issues?repo=${encodeURIComponent(repoParam)}`)
         if (res.ok) {
           const data = await res.json()
-          setIssues(data.issues?.map((issue: any) => ({
+          setIssues(data.issues?.map((issue: GitHubIssueResponse) => ({
             id: issue.id,
             number: issue.number,
             title: issue.title,
-            state: issue.state,
-            labels: issue.labels?.map((l: any) => l.name || l) || [],
+            state: issue.state as 'open' | 'closed',
+            labels: issue.labels?.map((l) => typeof l === 'string' ? l : l.name) || [],
           })) || [])
         }
       } catch (err) {
@@ -97,9 +106,9 @@ function ProjectContent() {
           id: m.id,
           name: m.name,
           description: m.description,
-          status: m.available ? 'available' : 'unavailable',
-          mode: (m as any).mode || 'redirect',
-          webUrl: (m as any).webUrl,
+          status: m.available ? 'available' as const : 'unavailable' as const,
+          mode: ('mode' in m ? (m as { mode: 'auto' | 'redirect' }).mode : 'redirect') as 'auto' | 'redirect',
+          webUrl: 'webUrl' in m ? (m as { webUrl?: string }).webUrl : undefined,
         })))
       } catch {
         // API 실패 시 기본 모델 사용 (리다이렉트 모드)
