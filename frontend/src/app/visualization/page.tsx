@@ -11,7 +11,7 @@
  * Level 3: 함수 실행 흐름
  */
 
-import { useState, useEffect, Suspense } from 'react'
+import { useState, useEffect, useCallback, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
@@ -137,21 +137,8 @@ function VisualizationContent() {
     ...(selectedFunction ? [{ label: selectedFunction, level: 'function' as ViewLevel }] : []),
   ]
 
-  // Level 0: 레포 목록 로드
-  useEffect(() => {
-    if (viewLevel === 'repos') {
-      loadRepos()
-    }
-  }, [viewLevel, owner])
-
-  // Level 1-A: 큰 그림 로드
-  useEffect(() => {
-    if (viewLevel === 'big-picture' && selectedRepo) {
-      loadAnalyze()
-    }
-  }, [viewLevel, selectedRepo])
-
-  async function loadRepos() {
+  // 데이터 로드 함수들
+  const loadRepos = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
@@ -168,9 +155,9 @@ function VisualizationContent() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [owner])
 
-  async function loadAnalyze() {
+  const loadAnalyze = useCallback(async () => {
     setLoading(true)
     setError(null)
     setAnalyzeData(null)  // 명시적 초기화
@@ -205,7 +192,21 @@ function VisualizationContent() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [selectedRepo])
+
+  // Level 0: 레포 목록 로드
+  useEffect(() => {
+    if (viewLevel === 'repos') {
+      loadRepos()
+    }
+  }, [viewLevel, loadRepos])
+
+  // Level 1-A: 큰 그림 로드
+  useEffect(() => {
+    if (viewLevel === 'big-picture' && selectedRepo) {
+      loadAnalyze()
+    }
+  }, [viewLevel, selectedRepo, loadAnalyze])
 
   // Level 2: 모듈 상세 로드
   async function loadModuleDetail(moduleName: string) {
