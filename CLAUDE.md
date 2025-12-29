@@ -111,7 +111,10 @@ frontend/src/app/api/
 │   └── [owner]/[repo]/    # 특정 레포 조회
 ├── issues/                # 이슈 CRUD
 │   └── [number]/          # 이슈 상세/close/reopen
-├── ai/resolve/            # AI 이슈 해결
+├── ai/
+│   ├── resolve/           # AI 이슈 해결
+│   ├── approve/           # AI 솔루션 승인
+│   └── reject/            # AI 솔루션 거절
 └── logic-flow/
     ├── repos/route.ts     # 레포 목록 + Mermaid
     ├── analyze/route.ts   # 코드 분석 (순환 탐지 포함)
@@ -174,3 +177,13 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGci...
 
 - `MermaidDiagram.tsx`: 'use client' 컴포넌트, `VISUALIZATION_LIMITS` 적용
 - `skott-analyzer.ts`: 서버 전용 (Node.js 환경)
+
+### State Management
+
+Zustand 사용 (`zustand` v4.5). 별도 store 파일은 필요 시 `src/lib/` 또는 `src/stores/`에 생성.
+
+### Visualization Constants
+
+`lib/colors.ts`에서 중앙 관리:
+- `LAYER_COLORS`: Mermaid 다이어그램 레이어 색상
+- `VISUALIZATION_LIMITS`: 노드/엣지 표시 제한 (성능 최적화)
