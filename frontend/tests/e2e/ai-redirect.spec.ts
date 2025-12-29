@@ -8,7 +8,7 @@ import { test, expect } from '@playwright/test'
 test.describe('AI 리다이렉트 모드', () => {
   test.beforeEach(async ({ page }) => {
     // 테스트 모드로 프로젝트 페이지 접속
-    await page.goto('/project?repo=test/repo&test=true')
+    await page.goto('/project?repo=test/repo&test=true&redirect=true')
     await page.waitForSelector('[data-testid="project-page"]')
   })
 

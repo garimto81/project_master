@@ -20,9 +20,7 @@ test.describe('AI 이슈 해결', () => {
     await expect(page.getByTestId('issue-detail')).toBeVisible();
   });
 
-  // TODO: #42 - AI 자동 모드 구현 후 테스트 활성화
-  // 리다이렉트 모드에서는 버튼이 disabled 상태가 되지 않음
-  test.skip('AI-E01: AI로 해결 버튼 클릭', async ({ page }) => {
+  test('AI-E01: AI로 해결 버튼 클릭', async ({ page }) => {
     // Assert - AI 해결 버튼이 있어야 함
     const resolveBtn = page.getByTestId('ai-resolve-btn');
     await expect(resolveBtn).toBeVisible();
@@ -31,12 +29,11 @@ test.describe('AI 이슈 해결', () => {
     // Act - 버튼 클릭
     await resolveBtn.click();
 
-    // Assert - 진행 중 상태
-    await expect(resolveBtn).toBeDisabled();
+    // Assert - 진행 중 상태 (버튼이 disabled 되거나 progress-display 표시)
+    await expect(page.getByTestId('progress-display')).toBeVisible({ timeout: 5000 });
   });
 
-  // TODO: #42 - AI 자동 모드 구현 후 테스트 활성화
-  test.skip('AI-E02: 실시간 진행 표시', async ({ page }) => {
+  test('AI-E02: 실시간 진행 표시', async ({ page }) => {
     // Act - AI 해결 시작
     await page.getByTestId('ai-resolve-btn').click();
 
@@ -46,12 +43,11 @@ test.describe('AI 이슈 해결', () => {
     await expect(page.getByTestId('progress-bar')).toBeVisible();
   });
 
-  // TODO: #42 - AI 자동 모드 구현 후 테스트 활성화
-  test.skip('AI-E03: 승인 플로우', async ({ page }) => {
+  test('AI-E03: 승인 플로우', async ({ page }) => {
     // Act - AI 해결 완료까지 대기
     await page.getByTestId('ai-resolve-btn').click();
 
-    // 진행 완료 대기 (API 실패 시 Mock 폴백 포함)
+    // 진행 완료 대기 (Mock 모드에서 빠르게 진행)
     await expect(page.getByTestId('approval-modal')).toBeVisible({ timeout: 15000 });
 
     // Assert - 승인/거부 버튼이 있어야 함
@@ -60,8 +56,7 @@ test.describe('AI 이슈 해결', () => {
     await expect(page.getByTestId('reject-btn')).toBeVisible();
   });
 
-  // TODO: #42 - AI 자동 모드 구현 후 테스트 활성화
-  test.skip('AI-E04: 롤백 기능 (거부)', async ({ page }) => {
+  test('AI-E04: 롤백 기능 (거부)', async ({ page }) => {
     // Act - AI 해결 완료까지 대기
     await page.getByTestId('ai-resolve-btn').click();
     await expect(page.getByTestId('approval-modal')).toBeVisible({ timeout: 15000 });
@@ -69,5 +64,9 @@ test.describe('AI 이슈 해결', () => {
     // Act - 거부 버튼 클릭
     const rejectBtn = page.getByTestId('reject-btn');
     await expect(rejectBtn).toBeVisible();
+    await rejectBtn.click();
+
+    // Assert - 승인 모달이 사라져야 함
+    await expect(page.getByTestId('approval-modal')).not.toBeVisible({ timeout: 5000 });
   });
 });

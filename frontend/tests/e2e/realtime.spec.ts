@@ -10,9 +10,8 @@
 
 import { test, expect } from '@playwright/test';
 
-// TODO: #42 - AI 자동 모드 구현 후 테스트 활성화
-// 현재 AI 모델은 리다이렉트 모드로 동작하여 progress-display가 표시되지 않음
-test.describe.skip('실시간 진행 표시', () => {
+// AI 자동 모드 테스트 (MOCK_AI_API=true 환경에서 실행)
+test.describe('실시간 진행 표시', () => {
   test.beforeEach(async ({ page }) => {
     // 테스트 모드로 프로젝트 페이지 이동 (mock 데이터 사용)
     await page.goto('/project?repo=test/mock-repo&test=true');
@@ -20,7 +19,7 @@ test.describe.skip('실시간 진행 표시', () => {
     await page.getByTestId('issue-1').click();
   });
 
-  test('RT-E01: 🔴 LIVE 표시', async ({ page }) => {
+  test('RT-E01: LIVE 표시', async ({ page }) => {
     // Act - AI 해결 시작
     await page.getByTestId('ai-resolve-btn').click();
 
@@ -37,8 +36,7 @@ test.describe.skip('실시간 진행 표시', () => {
     const progressBar = page.getByTestId('progress-bar');
     await expect(progressBar).toBeVisible();
 
-    // 진행률이 증가해야 함
-    await page.waitForTimeout(1000);
+    // 진행률이 0 이상이어야 함
     const progress = await progressBar.getAttribute('value');
     expect(Number(progress)).toBeGreaterThanOrEqual(0);
   });
@@ -49,6 +47,10 @@ test.describe.skip('실시간 진행 표시', () => {
 
     // Assert - 진행률 텍스트가 업데이트되어야 함
     await expect(page.getByTestId('progress-text')).toBeVisible();
+
+    // 진행률이 표시되어야 함 (0% ~ 100%)
+    const progressText = await page.getByTestId('progress-text').textContent();
+    expect(progressText).toMatch(/\d+%/);
   });
 
   test('RT-E04: 실시간 로그 스크롤', async ({ page }) => {
@@ -57,5 +59,8 @@ test.describe.skip('실시간 진행 표시', () => {
 
     // Assert - 진행 표시 영역이 있어야 함
     await expect(page.getByTestId('progress-display')).toBeVisible();
+
+    // model-used 표시 확인
+    await expect(page.getByTestId('model-used')).toBeVisible();
   });
 });
