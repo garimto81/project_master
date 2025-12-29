@@ -26,5 +26,8 @@ export default defineConfig({
     url: 'http://localhost:3000',
     reuseExistingServer: true,
     timeout: 120000,
+    env: {
+      MOCK_AI_API: 'true', // E2E 테스트에서 AI API Mock 활성화
+    },
   },
 });

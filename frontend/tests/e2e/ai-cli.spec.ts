@@ -12,9 +12,8 @@
 
 import { test, expect } from '@playwright/test';
 
-// TODO: #42 - AI 자동 모드 구현 후 테스트 활성화
-// 현재 AI 모델은 리다이렉트 모드로 동작하여 progress-display가 표시되지 않음
-test.describe.skip('AI CLI 연동', () => {
+// AI 자동 모드 테스트 (MOCK_AI_API=true 환경에서 실행)
+test.describe('AI CLI 연동', () => {
   test.beforeEach(async ({ page }) => {
     // 테스트 모드로 프로젝트 페이지 이동 (mock 데이터 사용)
     await page.goto('/project?repo=test/mock-repo&test=true');

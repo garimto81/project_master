@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useEffect, Suspense } from 'react'
+import { useState, useEffect, Suspense, useCallback, useRef } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { resolveIssueWithAI, getAvailableModels } from '@/lib/api'
+import { getAvailableModels } from '@/lib/api'
 import AIRedirectModal from '@/components/ai-redirect/AIRedirectModal'
 
 interface Issue {
@@ -32,25 +32,46 @@ interface GitHubIssueResponse {
   labels: Array<string | { name: string }>
 }
 
+interface SSEMessage {
+  type: 'progress' | 'chunk' | 'complete' | 'error'
+  stage?: 'analyzing' | 'context' | 'generating' | 'finalizing' | 'ready'
+  percent?: number
+  message?: string
+  content?: string
+  code?: string
+  output?: string
+  resolveId?: string
+  model_used?: string
+}
+
 // 기본 모델 (API 연결 실패 시 사용 - 리다이렉트 모드)
 const DEFAULT_MODELS: AIModel[] = [
   { id: 'claude', name: 'Claude', description: 'Anthropic Claude', status: 'available', mode: 'redirect', webUrl: 'https://claude.ai/new' },
-  { id: 'gpt-4o', name: 'ChatGPT', description: 'OpenAI GPT-4o', status: 'available', mode: 'redirect', webUrl: 'https://chatgpt.com/' },
+  { id: 'codex', name: 'GPT Codex', description: 'OpenAI GPT-4o', status: 'available', mode: 'redirect', webUrl: 'https://chatgpt.com/' },
   { id: 'gemini', name: 'Gemini', description: 'Google Gemini', status: 'available', mode: 'redirect', webUrl: 'https://gemini.google.com/' },
   { id: 'qwen', name: 'Qwen', description: 'Alibaba Qwen', status: 'available', mode: 'redirect', webUrl: 'https://tongyi.aliyun.com/qianwen/' },
 ]
 
 // E2E 테스트용 Mock 이슈 데이터
 const MOCK_ISSUES: Issue[] = [
-  { id: 1, number: 1, title: '테스트 이슈 #1', state: 'open', labels: ['bug'] },
-  { id: 2, number: 2, title: '테스트 이슈 #2', state: 'open', labels: ['enhancement'] },
+  { id: 1, number: 1, title: '테스트 이슈 #1', state: 'open', labels: ['bug'], body: '버그 수정 필요' },
+  { id: 2, number: 2, title: '테스트 이슈 #2', state: 'open', labels: ['enhancement'], body: '기능 개선' },
   { id: 3, number: 3, title: '닫힌 이슈 #3', state: 'closed', labels: [] },
+]
+
+// 테스트 모드용 자동 모드 모델 (MOCK_AI_API=true일 때)
+const TEST_MODE_MODELS: AIModel[] = [
+  { id: 'claude', name: 'Claude', description: 'Anthropic Claude', status: 'available', mode: 'auto' },
+  { id: 'codex', name: 'GPT Codex', description: 'OpenAI GPT-4o', status: 'available', mode: 'auto' },
+  { id: 'gemini', name: 'Gemini', description: 'Google Gemini', status: 'available', mode: 'auto' },
+  { id: 'qwen', name: 'Qwen', description: 'Alibaba Qwen', status: 'available', mode: 'auto' },
 ]
 
 function ProjectContent() {
   const searchParams = useSearchParams()
   const repoParam = searchParams.get('repo') || ''
   const testMode = searchParams.get('test') === 'true'
+  const redirectTestMode = searchParams.get('redirect') === 'true' // 리다이렉트 모드 테스트용
   const repoName = repoParam.split('/').pop() || '프로젝트'
 
   const [issues, setIssues] = useState<Issue[]>([])
@@ -58,12 +79,15 @@ function ProjectContent() {
   const [selectedModel, setSelectedModel] = useState<string>('claude')
   const [isResolving, setIsResolving] = useState(false)
   const [progress, setProgress] = useState(0)
+  const [progressStage, setProgressStage] = useState<string>('')
   const [usedModel, setUsedModel] = useState<string | null>(null)
   const [aiModels, setAiModels] = useState<AIModel[]>(DEFAULT_MODELS)
-  const [resolveResult, setResolveResult] = useState<{ code: string; output: string } | null>(null)
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [_error, setError] = useState<string | null>(null)
+  const [resolveResult, setResolveResult] = useState<{ code: string; output: string; resolveId?: string } | null>(null)
+  const [streamedCode, setStreamedCode] = useState<string>('')
+  const [error, setError] = useState<string | null>(null)
   const [showRedirectModal, setShowRedirectModal] = useState(false)
+
+  const abortControllerRef = useRef<AbortController | null>(null)
 
   const openIssues = issues.filter(i => i.state === 'open')
   const closedIssues = issues.filter(i => i.state === 'closed')
@@ -72,6 +96,8 @@ function ProjectContent() {
   useEffect(() => {
     if (testMode) {
       setIssues(MOCK_ISSUES)
+      // redirectTestMode면 리다이렉트 모델, 아니면 자동 모드 모델 사용
+      setAiModels(redirectTestMode ? DEFAULT_MODELS : TEST_MODE_MODELS)
       return
     }
 
@@ -95,10 +121,12 @@ function ProjectContent() {
       }
     }
     fetchIssues()
-  }, [repoParam, testMode])
+  }, [repoParam, testMode, redirectTestMode])
 
   // API에서 모델 목록 가져오기 (선택적)
   useEffect(() => {
+    if (testMode) return // 테스트 모드에서는 TEST_MODE_MODELS 사용
+
     const fetchModels = async () => {
       try {
         const models = await getAvailableModels()
@@ -116,7 +144,108 @@ function ProjectContent() {
       }
     }
     fetchModels()
-  }, [])
+  }, [testMode])
+
+  // SSE 스트리밍 처리
+  const handleSSEResolve = useCallback(async () => {
+    if (!selectedIssue) return
+
+    setIsResolving(true)
+    setProgress(0)
+    setProgressStage('')
+    setUsedModel(selectedModel)
+    setError(null)
+    setResolveResult(null)
+    setStreamedCode('')
+
+    // 이전 요청 취소
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+    }
+    abortControllerRef.current = new AbortController()
+
+    try {
+      const response = await fetch('/api/ai/resolve', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: selectedModel,
+          issue_id: selectedIssue.id,
+          issue_title: selectedIssue.title,
+          issue_body: selectedIssue.body,
+        }),
+        signal: abortControllerRef.current.signal,
+      })
+
+      if (!response.ok) {
+        throw new Error('SSE 스트림 시작 실패')
+      }
+
+      const reader = response.body?.getReader()
+      if (!reader) {
+        throw new Error('스트림 리더 생성 실패')
+      }
+
+      const decoder = new TextDecoder()
+      let buffer = ''
+      let accumulatedCode = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || ''
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data: SSEMessage = JSON.parse(line.slice(6))
+
+              switch (data.type) {
+                case 'progress':
+                  setProgress(data.percent || 0)
+                  setProgressStage(data.message || '')
+                  break
+                case 'chunk':
+                  if (data.content) {
+                    accumulatedCode += data.content
+                    setStreamedCode(accumulatedCode)
+                  }
+                  break
+                case 'complete':
+                  setProgress(100)
+                  setResolveResult({
+                    code: data.code || accumulatedCode,
+                    output: data.output || '',
+                    resolveId: data.resolveId,
+                  })
+                  setUsedModel(data.model_used || selectedModel)
+                  setIsResolving(false)
+                  break
+                case 'error':
+                  setError(data.message || 'AI 호출 실패')
+                  setIsResolving(false)
+                  break
+              }
+            } catch {
+              // JSON 파싱 오류 무시
+            }
+          }
+        }
+      }
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        return // 취소된 요청은 무시
+      }
+      console.error('SSE error:', err)
+      setError(err instanceof Error ? err.message : 'SSE 연결 실패')
+      setIsResolving(false)
+    }
+  }, [selectedIssue, selectedModel])
 
   const handleAIResolve = async () => {
     if (!selectedIssue) return
@@ -129,36 +258,61 @@ function ProjectContent() {
       return
     }
 
-    // 자동 모드: API 호출
-    setIsResolving(true)
-    setProgress(0)
-    setUsedModel(selectedModel)
-    setError(null)
-    setResolveResult(null)
+    // 자동 모드: SSE 스트리밍 호출
+    await handleSSEResolve()
+  }
+
+  // 승인 처리
+  const handleApprove = async () => {
+    if (!resolveResult?.resolveId) {
+      // resolveId가 없는 경우 (리다이렉트 모드 등)
+      setResolveResult(null)
+      setProgress(0)
+      return
+    }
 
     try {
-      // 진행률 시뮬레이션 시작
-      const progressInterval = setInterval(() => {
-        setProgress(prev => Math.min(prev + 10, 90))
-      }, 300)
-
-      // 실제 백엔드 API 호출
-      const result = await resolveIssueWithAI({
-        model: selectedModel,
-        issue_id: selectedIssue.id,
-        issue_title: selectedIssue.title
+      const response = await fetch('/api/ai/approve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resolveId: resolveResult.resolveId }),
       })
 
-      clearInterval(progressInterval)
-      setProgress(100)
-      setUsedModel(result.model_used)
-      setResolveResult({ code: result.code, output: result.output })
+      if (response.ok) {
+        // 승인 완료
+        setResolveResult(null)
+        setProgress(0)
+        setStreamedCode('')
+      }
     } catch (err) {
-      // API 실패 시 리다이렉트 모달로 폴백
-      console.warn('API call failed, falling back to redirect mode:', err)
-      setShowRedirectModal(true)
-    } finally {
-      setIsResolving(false)
+      console.error('Approve error:', err)
+    }
+  }
+
+  // 거부 처리
+  const handleReject = async () => {
+    if (!resolveResult?.resolveId) {
+      // resolveId가 없는 경우 (리다이렉트 모드 등)
+      setResolveResult(null)
+      setProgress(0)
+      return
+    }
+
+    try {
+      const response = await fetch('/api/ai/reject', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resolveId: resolveResult.resolveId }),
+      })
+
+      if (response.ok) {
+        // 거부 완료 - 상태 초기화
+        setResolveResult(null)
+        setProgress(0)
+        setStreamedCode('')
+      }
+    } catch (err) {
+      console.error('Reject error:', err)
     }
   }
 
@@ -252,28 +406,108 @@ function ProjectContent() {
                 {isResolving ? `${aiModels.find(m => m.id === selectedModel)?.name} 해결 중...` : 'AI로 해결'}
               </button>
 
-              {isResolving && (
-                <div data-testid="progress-display">
-                  <div data-testid="live-indicator" style={{ color: 'red' }}>
-                    🔴 LIVE - {aiModels.find(m => m.id === usedModel)?.name}
-                  </div>
-                  <progress data-testid="progress-bar" value={progress} max={100} />
-                  <span data-testid="progress-text">{progress}%</span>
-                  <div data-testid="model-used" style={{ fontSize: '12px', color: '#666' }}>
-                    사용 모델: {usedModel}
-                  </div>
+              {/* 에러 표시 */}
+              {error && (
+                <div style={{ color: 'red', marginTop: '10px' }}>
+                  오류: {error}
                 </div>
               )}
 
-              {!isResolving && progress === 100 && (
-                <div data-testid="approval-modal">
-                  <h4>변경 사항 승인</h4>
-                  <pre data-testid="diff-preview" style={{ background: '#f5f5f5', padding: '12px', overflow: 'auto', maxHeight: '200px' }}>
-                    {resolveResult?.code || '- old code\n+ new code'}
+              {/* 진행 표시 (SSE 스트리밍) */}
+              {isResolving && (
+                <div data-testid="progress-display" style={{ marginTop: '16px', padding: '16px', border: '1px solid #ddd', borderRadius: '8px' }}>
+                  <div data-testid="live-indicator" style={{ color: 'red', marginBottom: '8px', fontWeight: 'bold' }}>
+                    🔴 LIVE - {aiModels.find(m => m.id === usedModel)?.name}
+                  </div>
+                  <progress data-testid="progress-bar" value={progress} max={100} style={{ width: '100%', height: '20px' }} />
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px' }}>
+                    <span data-testid="progress-text">{progress}%</span>
+                    <span>{progressStage}</span>
+                  </div>
+                  <div data-testid="model-used" style={{ fontSize: '12px', color: '#666', marginTop: '8px' }}>
+                    사용 모델: {usedModel}
+                  </div>
+
+                  {/* 실시간 코드 스트리밍 표시 */}
+                  {streamedCode && (
+                    <pre style={{
+                      marginTop: '12px',
+                      padding: '12px',
+                      background: '#1e293b',
+                      color: '#e2e8f0',
+                      borderRadius: '6px',
+                      maxHeight: '150px',
+                      overflow: 'auto',
+                      fontSize: '12px'
+                    }}>
+                      {streamedCode}
+                    </pre>
+                  )}
+                </div>
+              )}
+
+              {/* 승인 모달 (AI 완료 후) */}
+              {!isResolving && progress === 100 && resolveResult && (
+                <div data-testid="approval-modal" style={{ marginTop: '16px', padding: '16px', border: '2px solid #3b82f6', borderRadius: '8px' }}>
+                  <h4 style={{ margin: '0 0 12px 0' }}>AI 생성 코드 검토</h4>
+                  <pre
+                    data-testid="diff-preview"
+                    style={{
+                      background: '#1e293b',
+                      color: '#e2e8f0',
+                      padding: '12px',
+                      overflow: 'auto',
+                      maxHeight: '200px',
+                      borderRadius: '6px',
+                      fontSize: '13px'
+                    }}
+                  >
+                    {resolveResult.code ? (
+                      <>
+                        <span style={{ color: '#ef4444' }}>- old code</span>
+                        {'\n'}
+                        <span style={{ color: '#22c55e' }}>+ {resolveResult.code}</span>
+                      </>
+                    ) : '- old code\n+ new code'}
                   </pre>
-                  <p style={{ fontSize: '12px', color: '#666' }}>{resolveResult?.output}</p>
-                  <button data-testid="approve-btn">승인</button>
-                  <button data-testid="reject-btn">거부</button>
+                  <p style={{ fontSize: '12px', color: '#666', marginTop: '8px' }}>
+                    {resolveResult.output?.slice(0, 200)}
+                    {resolveResult.output && resolveResult.output.length > 200 ? '...' : ''}
+                  </p>
+                  <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
+                    <button
+                      data-testid="approve-btn"
+                      onClick={handleApprove}
+                      style={{
+                        flex: 1,
+                        padding: '10px 16px',
+                        backgroundColor: '#22c55e',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        fontWeight: 500
+                      }}
+                    >
+                      ✅ 승인
+                    </button>
+                    <button
+                      data-testid="reject-btn"
+                      onClick={handleReject}
+                      style={{
+                        flex: 1,
+                        padding: '10px 16px',
+                        backgroundColor: '#ef4444',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        fontWeight: 500
+                      }}
+                    >
+                      ❌ 거부
+                    </button>
+                  </div>
                 </div>
               )}
 

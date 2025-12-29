@@ -1,18 +1,44 @@
 /**
- * AI Resolve Issue API
- * POST /api/ai/resolve - AI로 이슈 해결
+ * AI Resolve Issue API (SSE Streaming)
+ * POST /api/ai/resolve - AI로 이슈 해결 (SSE 스트리밍)
  *
- * FastAPI backend/src/main.py의 resolve_issue_with_ai 함수를 마이그레이션
- * Claude, GPT-4o, Gemini 등 여러 AI 모델 지원
+ * PRD: 0006-prd-ai-auto-mode.md
+ *
+ * SSE Response Events:
+ * - { type: 'progress', stage: 'analyzing' | 'generating' | 'ready', percent: number }
+ * - { type: 'chunk', content: string }
+ * - { type: 'complete', code: string, output: string, resolveId: string }
+ * - { type: 'error', message: string }
  */
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
+import { randomUUID } from 'crypto'
 
 interface AIResolveRequest {
   model: string
   issue_id: number
   issue_title: string
+  issue_body?: string
   prompt?: string
+}
+
+// 진행 중인 resolve 세션 저장 (메모리 캐시)
+const resolveCache = new Map<string, { code: string; output: string; status: 'pending' | 'approved' | 'rejected' }>()
+
+// 캐시 정리 (30분 후 자동 삭제)
+function scheduleCleanup(resolveId: string) {
+  setTimeout(() => {
+    resolveCache.delete(resolveId)
+  }, 30 * 60 * 1000)
+}
+
+// SSE 이벤트 포맷
+function formatSSE(event: string, data: Record<string, unknown>): string {
+  return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms))
 }
 
 // AI 모델별 API 호출
@@ -219,38 +245,154 @@ async function callQwen(prompt: string): Promise<{ code: string; output: string 
 export async function POST(request: NextRequest) {
   try {
     const body: AIResolveRequest = await request.json()
-    const { model, issue_id, issue_title, prompt } = body
+    const { model, issue_id, issue_title, issue_body, prompt } = body
 
     if (!model || !issue_id || !issue_title) {
-      return NextResponse.json(
-        { error: 'model, issue_id, issue_title은 필수입니다' },
-        { status: 400 }
+      return new Response(
+        JSON.stringify({ error: 'model, issue_id, issue_title은 필수입니다' }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
       )
     }
 
-    // 프롬프트 구성
-    const fullPrompt = prompt
-      ? `이슈 #${issue_id}: ${issue_title}\n\n사용자 지시: ${prompt}`
-      : `이슈 #${issue_id}: ${issue_title}\n\n이 이슈를 해결하는 코드를 작성해주세요.`
+    // resolveId 생성
+    const resolveId = randomUUID()
 
-    // AI 호출
-    const { code, output } = await callAI(model, fullPrompt)
+    // SSE 스트림 생성
+    const stream = new ReadableStream({
+      async start(controller) {
+        const encoder = new TextEncoder()
 
-    return NextResponse.json({
-      success: true,
-      model_used: model,
-      code,
-      output,
-      message: `${model}로 이슈 #${issue_id} 해결 완료`,
+        try {
+          // Stage 1: Analyzing (20%)
+          controller.enqueue(encoder.encode(formatSSE('message', {
+            type: 'progress',
+            stage: 'analyzing',
+            percent: 20,
+            message: '이슈 분석 중...'
+          })))
+          await delay(300)
+
+          // Stage 2: Context (40%)
+          controller.enqueue(encoder.encode(formatSSE('message', {
+            type: 'progress',
+            stage: 'context',
+            percent: 40,
+            message: '컨텍스트 수집 중...'
+          })))
+          await delay(200)
+
+          // 프롬프트 구성
+          const fullPrompt = prompt
+            ? `이슈 #${issue_id}: ${issue_title}\n\n${issue_body ? `설명: ${issue_body}\n\n` : ''}사용자 지시: ${prompt}`
+            : `이슈 #${issue_id}: ${issue_title}\n\n${issue_body ? `설명: ${issue_body}\n\n` : ''}이 이슈를 해결하는 코드를 작성해주세요.`
+
+          // Stage 3: Generating (60%)
+          controller.enqueue(encoder.encode(formatSSE('message', {
+            type: 'progress',
+            stage: 'generating',
+            percent: 60,
+            message: '코드 생성 중...'
+          })))
+
+          // AI 호출 (스트리밍 또는 일반)
+          let code = ''
+          let output = ''
+
+          const isMockMode = process.env.MOCK_AI_API === 'true'
+
+          if (isMockMode) {
+            // Mock 모드: 스트리밍 시뮬레이션
+            const chunks = [
+              '// Mock generated code for issue #' + issue_id + '\n',
+              'function solve() {\n',
+              '  // This is a mock solution\n',
+              '  return "issue resolved";\n',
+              '}\n'
+            ]
+
+            for (const chunk of chunks) {
+              controller.enqueue(encoder.encode(formatSSE('message', {
+                type: 'chunk',
+                content: chunk
+              })))
+              code += chunk
+              await delay(100)
+            }
+
+            output = `Mock AI response for ${model}:\n\n\`\`\`javascript\n${code}\`\`\`\n\nThis is a mock response for testing purposes.`
+          } else {
+            // 실제 AI 호출
+            const result = await callAI(model, fullPrompt)
+            code = result.code
+            output = result.output
+
+            // 코드 청크로 전송
+            const codeChunks = code.match(/.{1,50}/g) || []
+            for (const chunk of codeChunks) {
+              controller.enqueue(encoder.encode(formatSSE('message', {
+                type: 'chunk',
+                content: chunk
+              })))
+              await delay(20)
+            }
+          }
+
+          // Stage 4: Finalizing (80%)
+          controller.enqueue(encoder.encode(formatSSE('message', {
+            type: 'progress',
+            stage: 'finalizing',
+            percent: 80,
+            message: '결과 정리 중...'
+          })))
+          await delay(200)
+
+          // 결과 캐시에 저장
+          resolveCache.set(resolveId, { code, output, status: 'pending' })
+          scheduleCleanup(resolveId)
+
+          // Stage 5: Ready (100%)
+          controller.enqueue(encoder.encode(formatSSE('message', {
+            type: 'progress',
+            stage: 'ready',
+            percent: 100,
+            message: '검토 대기'
+          })))
+
+          // Complete 이벤트
+          controller.enqueue(encoder.encode(formatSSE('message', {
+            type: 'complete',
+            code,
+            output,
+            resolveId,
+            model_used: model
+          })))
+
+        } catch (error) {
+          controller.enqueue(encoder.encode(formatSSE('message', {
+            type: 'error',
+            message: error instanceof Error ? error.message : 'AI 호출 실패'
+          })))
+        } finally {
+          controller.close()
+        }
+      }
+    })
+
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+      },
     })
   } catch (error) {
     console.error('AI resolve API error:', error)
-    return NextResponse.json(
-      {
+    return new Response(
+      JSON.stringify({
         success: false,
         error: error instanceof Error ? error.message : 'AI 호출 실패',
-      },
-      { status: 500 }
+      }),
+      { status: 500, headers: { 'Content-Type': 'application/json' } }
     )
   }
 }
