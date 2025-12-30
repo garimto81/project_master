@@ -138,6 +138,14 @@ class TestCLIStreaming:
 
             mock_process.stdout.__aiter__ = lambda self: mock_readline()
             mock_process.returncode = 0
+
+            # stdin methods: write/close are sync, drain is async
+            mock_stdin = Mock()
+            mock_stdin.write = Mock()
+            mock_stdin.close = Mock()
+            mock_stdin.drain = AsyncMock()
+            mock_process.stdin = mock_stdin
+
             mock_exec.return_value = mock_process
 
             async for chunk in executor.stream_output(prompt):
@@ -187,6 +195,8 @@ class TestCLIErrorHandling:
         with patch("asyncio.create_subprocess_exec", new_callable=AsyncMock) as mock_exec:
             mock_process = AsyncMock()
             mock_process.communicate.side_effect = asyncio.TimeoutError()
+            # kill() is synchronous, not async
+            mock_process.kill = Mock()
             mock_exec.return_value = mock_process
 
             with pytest.raises(CLITimeoutError):
