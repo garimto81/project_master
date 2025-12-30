@@ -38,6 +38,28 @@ export default function HomePage() {
   const [repositories, setRepositories] = useState<Repository[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
+  const [loginError, setLoginError] = useState<string | null>(null)
+  const [isLoggingIn, setIsLoggingIn] = useState(false)
+
+  // GitHub 로그인 핸들러
+  const handleGitHubLogin = async () => {
+    setLoginError(null)
+    setIsLoggingIn(true)
+
+    try {
+      const { error } = await signInWithGitHub()
+      if (error) {
+        console.error('Login error:', error)
+        setLoginError(error.message || '로그인 중 오류가 발생했습니다.')
+        setIsLoggingIn(false)
+      }
+      // 성공 시 리다이렉트되므로 isLoggingIn 상태는 유지
+    } catch (err) {
+      console.error('Unexpected login error:', err)
+      setLoginError('예상치 못한 오류가 발생했습니다. 다시 시도해주세요.')
+      setIsLoggingIn(false)
+    }
+  }
 
   // 세션 확인
   useEffect(() => {
@@ -99,26 +121,63 @@ export default function HomePage() {
       }}>
         <h1 style={{ fontSize: '3rem', marginBottom: '0.5rem' }}>DevFlow</h1>
         <p style={{ color: '#94a3b8', marginBottom: '2rem' }}>비개발자를 위한 AI 협업 개발 플랫폼</p>
+
+        {loginError && (
+          <div data-testid="login-error" style={{
+            marginBottom: '1rem',
+            padding: '12px 24px',
+            background: 'rgba(220, 38, 38, 0.2)',
+            border: '1px solid #dc2626',
+            borderRadius: '8px',
+            color: '#fca5a5',
+            fontSize: '0.9rem',
+          }}>
+            {loginError}
+          </div>
+        )}
+
         <button
           data-testid="github-login-btn"
-          onClick={() => signInWithGitHub()}
+          onClick={handleGitHubLogin}
+          disabled={isLoggingIn}
           style={{
             padding: '16px 32px',
             fontSize: '1.1rem',
-            background: '#24292f',
+            background: isLoggingIn ? '#4a5568' : '#24292f',
             color: '#fff',
             border: 'none',
             borderRadius: '8px',
-            cursor: 'pointer',
+            cursor: isLoggingIn ? 'not-allowed' : 'pointer',
             display: 'flex',
             alignItems: 'center',
             gap: '8px',
+            opacity: isLoggingIn ? 0.7 : 1,
           }}
         >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
-          </svg>
-          GitHub로 로그인
+          {isLoggingIn ? (
+            <>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10" strokeDasharray="31.4" strokeDashoffset="10">
+                  <animateTransform
+                    attributeName="transform"
+                    type="rotate"
+                    from="0 12 12"
+                    to="360 12 12"
+                    dur="1s"
+                    repeatCount="indefinite"
+                  />
+                </circle>
+              </svg>
+              로그인 중...
+            </>
+          ) : (
+            <>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
+              </svg>
+              GitHub로 로그인
+            </>
+          )}
         </button>
       </main>
     )
