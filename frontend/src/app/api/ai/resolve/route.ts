@@ -254,6 +254,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // 테스트 모드 확인 (환경 변수 또는 헤더)
+    const isTestMode = process.env.MOCK_AI_API === 'true' || request.headers.get('X-Test-Mode') === 'true'
+
     // resolveId 생성
     const resolveId = randomUUID()
 
@@ -298,9 +301,7 @@ export async function POST(request: NextRequest) {
           let code = ''
           let output = ''
 
-          const isMockMode = process.env.MOCK_AI_API === 'true'
-
-          if (isMockMode) {
+          if (isTestMode) {
             // Mock 모드: 스트리밍 시뮬레이션
             const chunks = [
               '// Mock generated code for issue #' + issue_id + '\n',

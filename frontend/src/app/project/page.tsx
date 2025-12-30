@@ -165,11 +165,17 @@ function ProjectContent() {
     abortControllerRef.current = new AbortController()
 
     try {
+      // 테스트 모드에서는 X-Test-Mode 헤더 추가
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      }
+      if (testMode) {
+        headers['X-Test-Mode'] = 'true'
+      }
+
       const response = await fetch('/api/ai/resolve', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify({
           model: selectedModel,
           issue_id: selectedIssue.id,
@@ -245,7 +251,7 @@ function ProjectContent() {
       setError(err instanceof Error ? err.message : 'SSE 연결 실패')
       setIsResolving(false)
     }
-  }, [selectedIssue, selectedModel])
+  }, [selectedIssue, selectedModel, testMode])
 
   const handleAIResolve = async () => {
     if (!selectedIssue) return
