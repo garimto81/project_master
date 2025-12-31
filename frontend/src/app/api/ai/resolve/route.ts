@@ -244,7 +244,24 @@ async function callQwen(prompt: string): Promise<{ code: string; output: string 
 
 export async function POST(request: NextRequest) {
   try {
-    const body: AIResolveRequest = await request.json()
+    // 안전한 JSON 파싱 (빈 body 처리)
+    let body: AIResolveRequest
+    try {
+      const text = await request.text()
+      if (!text || text.trim() === '') {
+        return new Response(
+          JSON.stringify({ error: 'Request body is required' }),
+          { status: 400, headers: { 'Content-Type': 'application/json' } }
+        )
+      }
+      body = JSON.parse(text)
+    } catch {
+      return new Response(
+        JSON.stringify({ error: 'Invalid JSON in request body' }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      )
+    }
+
     const { model, issue_id, issue_title, issue_body, prompt } = body
 
     if (!model || !issue_id || !issue_title) {
