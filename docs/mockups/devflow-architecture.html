@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>DevFlow Architecture</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+  <style>
+    body {
+      font-family: system-ui;
+      background: #1a1a2e;
+      color: #eee;
+      padding: 20px;
+    }
+    h1 { text-align: center; }
+    .mermaid {
+      background: #fff;
+      padding: 20px;
+      border-radius: 8px;
+    }
+  </style>
+</head>
+<body>
+  <h1>DevFlow Frontend Architecture</h1>
+  <div class="mermaid">
+flowchart TB
+    subgraph Pages["📄 Pages"]
+        style Pages fill:#dbeafe,stroke:#3b82f6
+        VP["visualization/page.tsx"]
+        PP["project/page.tsx"]
+        HP["page.tsx"]
+        AC["auth/callback"]
+    end
+
+    subgraph Components["🧩 Components"]
+        style Components fill:#dcfce7,stroke:#22c55e
+        MD["MermaidDiagram"]
+        IFD["InteractiveFlowDiagram"]
+        SP["StepPlayer"]
+        LFV["LogicFlowViewer"]
+    end
+
+    subgraph Lib["📚 Lib"]
+        style Lib fill:#f3e8ff,stroke:#a855f7
+        AUTH["auth.ts"]
+        SUPA["supabase.ts"]
+        COLORS["colors.ts"]
+    end
+
+    subgraph API["⚡ API Routes"]
+        style API fill:#fef3c7,stroke:#f59e0b
+        LF_ANALYZE["/logic-flow/analyze"]
+        LF_REPOS["/logic-flow/repos"]
+        LF_TRACE["/logic-flow/trace"]
+        AI_RESOLVE["/ai/resolve"]
+    end
+
+    subgraph External["🌐 External"]
+        style External fill:#fee2e2,stroke:#ef4444
+        GH["GitHub API"]
+        SB["Supabase"]
+    end
+
+    VP --> MD
+    VP --> IFD
+    VP --> SP
+    VP --> SUPA
+    PP --> LFV
+    HP --> SUPA
+    AC --> SUPA
+
+    MD --> COLORS
+    LFV --> MD
+    SP --> MD
+
+    LF_ANALYZE --> AUTH
+    LF_REPOS --> AUTH
+    AI_RESOLVE --> AUTH
+
+    AUTH --> SB
+    SUPA --> SB
+    LF_REPOS --> GH
+    LF_ANALYZE --> GH
+
+    VP -.->|fetch| LF_ANALYZE
+    VP -.->|fetch| LF_REPOS
+  </div>
+  <script>mermaid.initialize({startOnLoad:true, theme:'default'})</script>
+</body>
+</html>
