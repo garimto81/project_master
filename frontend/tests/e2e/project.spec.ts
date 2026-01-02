@@ -74,3 +74,33 @@ test.describe('프로젝트 관리', () => {
     }
   });
 });
+
+test.describe('프로젝트 다이어그램', () => {
+  test('PROJ-DIAG-01: 다이어그램 섹션 표시', async ({ page }) => {
+    // 테스트 모드로 프로젝트 페이지 접근
+    await page.goto('/project?repo=owner/repo&test=true');
+
+    // 다이어그램 섹션이 표시되어야 함
+    await expect(page.getByTestId('code-diagram-section')).toBeVisible({ timeout: 10000 });
+  });
+
+  test('PROJ-DIAG-02: mock 다이어그램 렌더링', async ({ page }) => {
+    // 테스트 모드로 프로젝트 페이지 접근
+    await page.goto('/project?repo=owner/repo&test=true');
+
+    // 다이어그램 컨테이너가 표시되어야 함
+    await expect(page.getByTestId('interactive-diagram-container')).toBeVisible({ timeout: 10000 });
+
+    // InteractiveFlowDiagram 내부 요소 확인
+    await expect(page.getByTestId('interactive-flow-diagram')).toBeVisible();
+  });
+
+  test('PROJ-DIAG-03: 다이어그램 섹션 제목 확인', async ({ page }) => {
+    await page.goto('/project?repo=owner/repo&test=true');
+
+    // 다이어그램 섹션 내 제목 확인
+    const section = page.getByTestId('code-diagram-section');
+    await expect(section).toBeVisible({ timeout: 10000 });
+    await expect(section.locator('h2')).toContainText('코드 구조 시각화');
+  });
+});

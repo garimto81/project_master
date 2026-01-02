@@ -3,8 +3,15 @@
 import { useState, useEffect, Suspense, useCallback, useRef } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
+import dynamic from 'next/dynamic'
 import { getAvailableModels } from '@/lib/api'
 import AIRedirectModal from '@/components/ai-redirect/AIRedirectModal'
+
+// InteractiveFlowDiagram 동적 로드 (SSR 비활성화)
+const InteractiveFlowDiagram = dynamic(
+  () => import('@/components/InteractiveFlowDiagram'),
+  { ssr: false }
+)
 
 interface Issue {
   id: number
@@ -44,6 +51,33 @@ interface SSEMessage {
   model_used?: string
 }
 
+// 다이어그램 관련 인터페이스
+interface Layer {
+  name: string
+  displayName: string
+  modules: string[]
+  description: string
+}
+
+interface Connection {
+  from: string
+  to: string
+  type: 'call' | 'fetch' | 'import' | 'event'
+  label?: string
+}
+
+interface AnalyzeData {
+  repo: string
+  data_flow: {
+    entry_points: string[]
+    layers: Layer[]
+    connections?: Connection[]
+  }
+  risk_points: Array<{ location: string; function: string; risk: 'high' | 'medium' | 'low'; reason: string }>
+  issues: Array<{ number: number; title: string; related_layer?: string }>
+  mermaid_code: string
+}
+
 // 기본 모델 (API 연결 실패 시 사용 - 리다이렉트 모드)
 const DEFAULT_MODELS: AIModel[] = [
   { id: 'claude', name: 'Claude', description: 'Anthropic Claude', status: 'available', mode: 'redirect', webUrl: 'https://claude.ai/new' },
@@ -67,6 +101,26 @@ const TEST_MODE_MODELS: AIModel[] = [
   { id: 'qwen', name: 'Qwen', description: 'Alibaba Qwen', status: 'available', mode: 'auto' },
 ]
 
+// E2E 테스트용 Mock 다이어그램 데이터
+const MOCK_DIAGRAM_DATA: AnalyzeData = {
+  repo: 'test/repo',
+  data_flow: {
+    entry_points: ['src/index.tsx'],
+    layers: [
+      { name: 'ui', displayName: '화면 (UI)', modules: ['LoginPage', 'Dashboard'], description: '사용자 화면' },
+      { name: 'logic', displayName: '처리 (Logic)', modules: ['authService', 'utils'], description: '비즈니스 로직' },
+      { name: 'server', displayName: '서버 (API)', modules: ['authRoute', 'userRoute'], description: 'API 엔드포인트' },
+    ],
+    connections: [
+      { from: 'ui', to: 'logic', type: 'call', label: '이벤트 처리' },
+      { from: 'logic', to: 'server', type: 'fetch', label: 'API 호출' },
+    ],
+  },
+  risk_points: [],
+  issues: [],
+  mermaid_code: 'flowchart TB\n  UI --> Logic --> Server',
+}
+
 function ProjectContent() {
   const searchParams = useSearchParams()
   const repoParam = searchParams.get('repo') || ''
@@ -86,6 +140,11 @@ function ProjectContent() {
   const [streamedCode, setStreamedCode] = useState<string>('')
   const [error, setError] = useState<string | null>(null)
   const [showRedirectModal, setShowRedirectModal] = useState(false)
+
+  // 다이어그램 관련 상태
+  const [diagramData, setDiagramData] = useState<AnalyzeData | null>(null)
+  const [diagramLoading, setDiagramLoading] = useState(false)
+  const [diagramError, setDiagramError] = useState<string | null>(null)
 
   const abortControllerRef = useRef<AbortController | null>(null)
 
@@ -145,6 +204,41 @@ function ProjectContent() {
     }
     fetchModels()
   }, [testMode])
+
+  // 코드 다이어그램 데이터 로드
+  useEffect(() => {
+    if (testMode) {
+      setDiagramData(MOCK_DIAGRAM_DATA)
+      return
+    }
+    if (!repoParam) return
+
+    const fetchDiagram = async () => {
+      setDiagramLoading(true)
+      setDiagramError(null)
+      try {
+        const res = await fetch('/api/logic-flow/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ repo: repoParam, depth: 'medium', include_risk: true }),
+        })
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}))
+          throw new Error(data.error || `분석 실패 (HTTP ${res.status})`)
+        }
+        const data = await res.json()
+        if (!data || !data.data_flow || !data.data_flow.layers) {
+          throw new Error('분석 데이터가 불완전합니다')
+        }
+        setDiagramData(data)
+      } catch (err) {
+        setDiagramError((err as Error).message)
+      } finally {
+        setDiagramLoading(false)
+      }
+    }
+    fetchDiagram()
+  }, [repoParam, testMode])
 
   // SSE 스트리밍 처리
   const handleSSEResolve = useCallback(async () => {
@@ -517,16 +611,72 @@ function ProjectContent() {
                 </div>
               )}
 
-              <div data-testid="code-diagram" style={{ marginTop: '20px', border: '1px solid #ddd', height: '300px' }}>
-                <p>코드 다이어그램</p>
-                <div data-testid="diagram-node" className="node">src/auth.py</div>
-              </div>
             </div>
           ) : (
             <p>이슈를 선택하세요</p>
           )}
         </section>
       </div>
+
+      {/* 코드 다이어그램 섹션 - 이슈 선택과 무관하게 항상 표시 */}
+      {repoParam && (
+        <section
+          data-testid="code-diagram-section"
+          style={{
+            marginTop: '24px',
+            padding: '20px',
+            background: '#fff',
+            borderRadius: '12px',
+            border: '1px solid #e2e8f0',
+          }}
+        >
+          <h2 style={{ margin: '0 0 16px', fontSize: '1.2rem', color: '#1e293b' }}>
+            코드 구조 시각화
+          </h2>
+
+          {/* 로딩 상태 */}
+          {diagramLoading && (
+            <div
+              data-testid="diagram-loading"
+              style={{
+                padding: '40px',
+                textAlign: 'center',
+                color: '#64748b'
+              }}
+            >
+              <div style={{ fontSize: '24px', marginBottom: '12px' }}>...</div>
+              <p>코드 구조 분석 중...</p>
+            </div>
+          )}
+
+          {/* 에러 상태 */}
+          {diagramError && (
+            <div
+              data-testid="diagram-error"
+              style={{
+                padding: '20px',
+                background: '#fef2f2',
+                borderRadius: '8px',
+                color: '#dc2626',
+              }}
+            >
+              <p style={{ margin: 0 }}>분석 오류: {diagramError}</p>
+            </div>
+          )}
+
+          {/* 다이어그램 표시 */}
+          {!diagramLoading && !diagramError && diagramData && (
+            <div data-testid="interactive-diagram-container">
+              <InteractiveFlowDiagram
+                layers={diagramData.data_flow.layers}
+                connections={diagramData.data_flow.connections || []}
+                riskPoints={diagramData.risk_points}
+                issues={diagramData.issues}
+              />
+            </div>
+          )}
+        </section>
+      )}
 
       {/* AI 리다이렉트 모달 */}
       {selectedIssue && (

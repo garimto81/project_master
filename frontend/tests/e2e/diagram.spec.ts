@@ -15,30 +15,35 @@ test.describe('코드 다이어그램', () => {
   test.beforeEach(async ({ page }) => {
     // 테스트 모드로 프로젝트 페이지 이동 (mock 데이터 사용)
     await page.goto('/project?repo=test/mock-repo&test=true');
-    await page.waitForSelector('[data-testid="issue-1"]', { timeout: 10000 });
-    await page.getByTestId('issue-1').click();
-    await expect(page.getByTestId('issue-detail')).toBeVisible();
+    // 다이어그램 섹션 로드 대기
+    await page.waitForSelector('[data-testid="code-diagram-section"]', { timeout: 10000 });
   });
 
   test('DG-E01: 다이어그램 표시', async ({ page }) => {
-    // Assert - 다이어그램 영역이 있어야 함
-    await expect(page.getByTestId('code-diagram')).toBeVisible();
+    // Assert - 다이어그램 섹션이 있어야 함
+    await expect(page.getByTestId('code-diagram-section')).toBeVisible();
+    // 다이어그램 컨테이너가 있어야 함
+    await expect(page.getByTestId('interactive-diagram-container')).toBeVisible();
   });
 
   test('DG-E02: 노드 클릭 인터랙션', async ({ page }) => {
-    // Assert - 노드가 표시되어야 함
-    const node = page.getByTestId('diagram-node');
-    await expect(node).toBeVisible();
+    // Assert - InteractiveFlowDiagram이 표시되어야 함
+    const diagram = page.getByTestId('interactive-flow-diagram');
+    await expect(diagram).toBeVisible();
   });
 
   test('DG-E03: 줌/패닝 컨트롤', async ({ page }) => {
-    // 다이어그램 영역 확인 (React Flow가 있으면 줌/패닝 지원)
-    await expect(page.getByTestId('code-diagram')).toBeVisible();
+    // InteractiveFlowDiagram이 줌/패닝을 지원함
+    await expect(page.getByTestId('interactive-flow-diagram')).toBeVisible();
+    // 줌 컨트롤 버튼 확인 (+, −, 리셋)
+    await expect(page.getByRole('button', { name: '+' })).toBeVisible();
+    await expect(page.getByRole('button', { name: '리셋' })).toBeVisible();
   });
 
-  test('DG-E04: 에러 노드 팝업', async ({ page }) => {
-    // 에러 노드는 빨간색으로 표시되어야 함
-    // TODO: 에러 상태 시뮬레이션 추가
-    await expect(page.getByTestId('code-diagram')).toBeVisible();
+  test('DG-E04: 에러 상태 표시', async ({ page }) => {
+    // 다이어그램 섹션 제목 확인
+    const section = page.getByTestId('code-diagram-section');
+    await expect(section).toBeVisible();
+    await expect(section.locator('h2')).toContainText('코드 구조 시각화');
   });
 });

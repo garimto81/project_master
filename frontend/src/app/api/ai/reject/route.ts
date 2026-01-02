@@ -13,7 +13,24 @@ interface RejectRequest {
 
 export async function POST(request: NextRequest) {
   try {
-    const body: RejectRequest = await request.json()
+    // 안전한 JSON 파싱 (빈 body 처리)
+    let body: RejectRequest
+    try {
+      const text = await request.text()
+      if (!text || text.trim() === '') {
+        return NextResponse.json(
+          { success: false, error: 'Request body is required' },
+          { status: 400 }
+        )
+      }
+      body = JSON.parse(text)
+    } catch {
+      return NextResponse.json(
+        { success: false, error: 'Invalid JSON in request body' },
+        { status: 400 }
+      )
+    }
+
     const { resolveId } = body
 
     if (!resolveId) {

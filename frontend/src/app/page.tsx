@@ -1,23 +1,10 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { getRepositories, type Repository } from '@/lib/api'
-import { signInWithGitHub, signOut, getSession } from '@/lib/supabase'
-
-// 폴백용 레포지토리 데이터
-const FALLBACK_REPOS: Repository[] = [
-  {
-    id: 1,
-    name: 'claude',
-    full_name: 'garimto81/claude',
-    description: 'AI-Native Developer Dashboard',
-    language: 'TypeScript',
-    open_issues_count: 5,
-    stargazers_count: 10,
-    updated_at: new Date().toISOString(),
-  },
-]
+import { type Repository } from '@/lib/api'
+import { signInWithGitHub, signOut } from '@/lib/supabase'
+import { useAuth, useRepositories } from '@/lib/hooks'
 
 // 언어별 색상
 const LANGUAGE_COLORS: Record<string, string> = {
@@ -32,14 +19,15 @@ const LANGUAGE_COLORS: Record<string, string> = {
 
 export default function HomePage() {
   const router = useRouter()
-  const [isLoggedIn, setIsLoggedIn] = useState(false)
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [_isCheckingAuth, setIsCheckingAuth] = useState(true)
-  const [repositories, setRepositories] = useState<Repository[]>([])
-  const [isLoading, setIsLoading] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [loginError, setLoginError] = useState<string | null>(null)
   const [isLoggingIn, setIsLoggingIn] = useState(false)
+
+  // SWR 기반 캐시 hooks
+  const { isLoggedIn, isLoading: isAuthLoading, refresh: refreshAuth } = useAuth()
+  const { repositories, isLoading: isReposLoading } = useRepositories(isLoggedIn)
+
+  const isLoading = isAuthLoading || isReposLoading
 
   // GitHub 로그인 핸들러
   const handleGitHubLogin = async () => {
@@ -60,40 +48,6 @@ export default function HomePage() {
       setIsLoggingIn(false)
     }
   }
-
-  // 세션 확인
-  useEffect(() => {
-    const checkSession = async () => {
-      try {
-        const session = await getSession()
-        setIsLoggedIn(!!session)
-      } catch (err) {
-        console.error('Session check error:', err)
-      } finally {
-        setIsCheckingAuth(false)
-      }
-    }
-    checkSession()
-  }, [])
-
-  // 레포지토리 로드
-  useEffect(() => {
-    if (isLoggedIn) {
-      const fetchRepos = async () => {
-        setIsLoading(true)
-        try {
-          const response = await getRepositories()
-          setRepositories(response.repositories)
-        } catch (err) {
-          console.warn('Failed to fetch repositories, using fallback:', err)
-          setRepositories(FALLBACK_REPOS)
-        } finally {
-          setIsLoading(false)
-        }
-      }
-      fetchRepos()
-    }
-  }, [isLoggedIn])
 
   // 검색 필터링
   const filteredRepos = repositories.filter(repo =>
@@ -203,7 +157,7 @@ export default function HomePage() {
           data-testid="logout-btn"
           onClick={async () => {
             await signOut()
-            setIsLoggedIn(false)
+            refreshAuth() // SWR 캐시 갱신
           }}
           style={{
             padding: '8px 16px',

@@ -28,7 +28,18 @@ interface TraceResponse {
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
+    // 안전한 JSON 파싱 (빈 body 처리)
+    let body: { repo?: string; function?: string; path?: string; input_example?: Record<string, unknown> }
+    try {
+      const text = await request.text()
+      if (!text || text.trim() === '') {
+        return NextResponse.json({ error: 'Request body is required' }, { status: 400 })
+      }
+      body = JSON.parse(text)
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON in request body' }, { status: 400 })
+    }
+
     const { repo, function: funcName, path, input_example } = body
 
     if (!repo || !funcName) {

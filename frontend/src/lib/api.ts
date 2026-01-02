@@ -81,10 +81,10 @@ export async function getCLIStatus(): Promise<CLIStatus> {
 }
 
 /**
- * 사용 가능한 AI 모델 목록 조회
+ * 사용 가능한 AI 모델 목록 조회 (Next.js API Route 사용)
  */
 export async function getAvailableModels(): Promise<AIModel[]> {
-  const response = await fetch(`${API_BASE_URL}/api/models`);
+  const response = await fetch('/api/models');
   if (!response.ok) throw new Error('Failed to get models');
   const data = await response.json();
   return data.models;
