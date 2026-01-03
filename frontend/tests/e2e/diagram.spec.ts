@@ -22,22 +22,21 @@ test.describe('코드 다이어그램', () => {
   test('DG-E01: 다이어그램 표시', async ({ page }) => {
     // Assert - 다이어그램 섹션이 있어야 함
     await expect(page.getByTestId('code-diagram-section')).toBeVisible();
-    // 다이어그램 컨테이너가 있어야 함
-    await expect(page.getByTestId('interactive-diagram-container')).toBeVisible();
+    // ReactFlowDiagram 컨테이너가 있어야 함
+    await expect(page.getByTestId('react-flow-diagram-container')).toBeVisible();
   });
 
   test('DG-E02: 노드 클릭 인터랙션', async ({ page }) => {
-    // Assert - InteractiveFlowDiagram이 표시되어야 함
-    const diagram = page.getByTestId('interactive-flow-diagram');
+    // Assert - ReactFlowDiagram이 표시되어야 함
+    const diagram = page.getByTestId('react-flow-diagram');
     await expect(diagram).toBeVisible();
   });
 
   test('DG-E03: 줌/패닝 컨트롤', async ({ page }) => {
-    // InteractiveFlowDiagram이 줌/패닝을 지원함
-    await expect(page.getByTestId('interactive-flow-diagram')).toBeVisible();
-    // 줌 컨트롤 버튼 확인 (+, −, 리셋)
-    await expect(page.getByRole('button', { name: '+' })).toBeVisible();
-    await expect(page.getByRole('button', { name: '리셋' })).toBeVisible();
+    // ReactFlowDiagram이 줌/패닝을 지원함 (React Flow 내장 컨트롤)
+    await expect(page.getByTestId('react-flow-diagram')).toBeVisible();
+    // React Flow 내장 Controls 확인
+    await expect(page.locator('.react-flow__controls')).toBeVisible();
   });
 
   test('DG-E04: 에러 상태 표시', async ({ page }) => {

@@ -6,10 +6,11 @@ import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import { getAvailableModels } from '@/lib/api'
 import AIRedirectModal from '@/components/ai-redirect/AIRedirectModal'
+import type { FileAnalysis, LayerType, FunctionInfo } from '@/lib/ast-analyzer'
 
-// InteractiveFlowDiagram 동적 로드 (SSR 비활성화)
-const InteractiveFlowDiagram = dynamic(
-  () => import('@/components/InteractiveFlowDiagram'),
+// ReactFlowDiagram 동적 로드 (SSR 비활성화)
+const ReactFlowDiagram = dynamic(
+  () => import('@/components/visualization/ReactFlowDiagram'),
   { ssr: false }
 )
 
@@ -119,6 +120,61 @@ const MOCK_DIAGRAM_DATA: AnalyzeData = {
   risk_points: [],
   issues: [],
   mermaid_code: 'flowchart TB\n  UI --> Logic --> Server',
+}
+
+/**
+ * AnalyzeData를 FileAnalysis[]로 변환
+ * ReactFlowDiagram이 기대하는 형식으로 변환
+ */
+function convertAnalyzeDataToFileAnalysis(data: AnalyzeData): FileAnalysis[] {
+  const files: FileAnalysis[] = []
+
+  // 레이어 이름을 LayerType으로 매핑
+  const layerMap: Record<string, LayerType> = {
+    ui: 'ui',
+    logic: 'logic',
+    server: 'api',
+    data: 'data',
+    lib: 'lib',
+  }
+
+  for (const layer of data.data_flow.layers) {
+    const layerType = layerMap[layer.name] || 'unknown'
+
+    // 각 모듈을 파일로 변환
+    for (const moduleName of layer.modules) {
+      // 모듈 이름에서 함수 정보 생성
+      const isComponent = /^[A-Z]/.test(moduleName) && !moduleName.includes('Route')
+      const isHook = moduleName.startsWith('use')
+      const isApiRoute = layer.name === 'server' || moduleName.includes('Route')
+
+      const functionInfo: FunctionInfo = {
+        id: `${moduleName}-main`,
+        name: moduleName,
+        file: `src/${layer.name}/${moduleName}.tsx`,
+        line: 1,
+        type: isComponent ? 'component' : isHook ? 'hook' : 'function',
+        isExported: true,
+        isAsync: isApiRoute,
+        parameters: [],
+        returnType: null,
+      }
+
+      files.push({
+        path: `src/${layer.name}/${moduleName}.tsx`,
+        layer: layerType,
+        functions: [functionInfo],
+        classes: [],
+        exports: [{ name: moduleName, type: isComponent ? 'function' : 'function', line: 1 }],
+        imports: [],
+        hasJsx: isComponent,
+        hasSupabase: layer.name === 'data',
+        isApiRoute,
+      })
+    }
+  }
+
+  return files
 }
 
 function ProjectContent() {
@@ -664,14 +720,15 @@ function ProjectContent() {
             </div>
           )}
 
-          {/* 다이어그램 표시 */}
+          {/* 다이어그램 표시 - ReactFlowDiagram */}
           {!diagramLoading && !diagramError && diagramData && (
-            <div data-testid="interactive-diagram-container">
-              <InteractiveFlowDiagram
-                layers={diagramData.data_flow.layers}
-                connections={diagramData.data_flow.connections || []}
-                riskPoints={diagramData.risk_points}
-                issues={diagramData.issues}
+            <div data-testid="react-flow-diagram-container">
+              <ReactFlowDiagram
+                mode="layer"
+                files={convertAnalyzeDataToFileAnalysis(diagramData)}
+                onNodeClick={(nodeId, nodeData) => {
+                  console.log('Node clicked:', nodeId, nodeData)
+                }}
               />
             </div>
           )}

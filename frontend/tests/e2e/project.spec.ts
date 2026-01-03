@@ -88,11 +88,11 @@ test.describe('프로젝트 다이어그램', () => {
     // 테스트 모드로 프로젝트 페이지 접근
     await page.goto('/project?repo=owner/repo&test=true');
 
-    // 다이어그램 컨테이너가 표시되어야 함
-    await expect(page.getByTestId('interactive-diagram-container')).toBeVisible({ timeout: 10000 });
+    // ReactFlowDiagram 컨테이너가 표시되어야 함
+    await expect(page.getByTestId('react-flow-diagram-container')).toBeVisible({ timeout: 10000 });
 
-    // InteractiveFlowDiagram 내부 요소 확인
-    await expect(page.getByTestId('interactive-flow-diagram')).toBeVisible();
+    // ReactFlowDiagram 내부 요소 확인
+    await expect(page.getByTestId('react-flow-diagram')).toBeVisible();
   });
 
   test('PROJ-DIAG-03: 다이어그램 섹션 제목 확인', async ({ page }) => {
