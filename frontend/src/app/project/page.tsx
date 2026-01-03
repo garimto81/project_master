@@ -6,6 +6,7 @@ import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import { getAvailableModels } from '@/lib/api'
 import AIRedirectModal from '@/components/ai-redirect/AIRedirectModal'
+import AnalysisProgressBar, { type AnalysisStage } from '@/components/visualization/AnalysisProgressBar'
 import type { FileAnalysis, LayerType, FunctionInfo } from '@/lib/ast-analyzer'
 
 // ReactFlowDiagram 동적 로드 (SSR 비활성화)
@@ -202,6 +203,11 @@ function ProjectContent() {
   const [diagramLoading, setDiagramLoading] = useState(false)
   const [diagramError, setDiagramError] = useState<string | null>(null)
 
+  // Progress Bar 상태
+  const [analysisStage, setAnalysisStage] = useState<AnalysisStage>('fetching')
+  const [analysisPercent, setAnalysisPercent] = useState(0)
+  const [analysisMessage, setAnalysisMessage] = useState('')
+
   const abortControllerRef = useRef<AbortController | null>(null)
 
   const openIssues = issues.filter(i => i.state === 'open')
@@ -261,7 +267,7 @@ function ProjectContent() {
     fetchModels()
   }, [testMode])
 
-  // 코드 다이어그램 데이터 로드
+  // 코드 다이어그램 데이터 로드 (Progress Bar 포함)
   useEffect(() => {
     if (testMode) {
       setDiagramData(MOCK_DIAGRAM_DATA)
@@ -272,22 +278,66 @@ function ProjectContent() {
     const fetchDiagram = async () => {
       setDiagramLoading(true)
       setDiagramError(null)
+
+      // Progress Bar 초기화
+      setAnalysisStage('fetching')
+      setAnalysisPercent(0)
+      setAnalysisMessage('GitHub에서 파일 목록 가져오는 중...')
+
+      // 진행률 시뮬레이션 (API가 실제 진행률을 반환하지 않으므로)
+      const progressInterval = setInterval(() => {
+        setAnalysisPercent((prev) => {
+          if (prev < 10) {
+            setAnalysisStage('fetching')
+            setAnalysisMessage('GitHub에서 파일 목록 가져오는 중...')
+            return prev + 2
+          } else if (prev < 20) {
+            setAnalysisStage('scanning')
+            setAnalysisMessage('분석할 파일 찾는 중...')
+            return prev + 2
+          } else if (prev < 80) {
+            setAnalysisStage('analyzing')
+            setAnalysisMessage('코드 구조 분석 중...')
+            return prev + 1
+          } else if (prev < 95) {
+            setAnalysisStage('building')
+            setAnalysisMessage('다이어그램 생성 중...')
+            return prev + 0.5
+          }
+          return prev
+        })
+      }, 200)
+
       try {
         const res = await fetch('/api/logic-flow/analyze', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ repo: repoParam, depth: 'medium', include_risk: true }),
         })
+
+        clearInterval(progressInterval)
+
         if (!res.ok) {
           const data = await res.json().catch(() => ({}))
+          setAnalysisStage('error')
+          setAnalysisPercent(0)
           throw new Error(data.error || `분석 실패 (HTTP ${res.status})`)
         }
+
         const data = await res.json()
         if (!data || !data.data_flow || !data.data_flow.layers) {
+          setAnalysisStage('error')
           throw new Error('분석 데이터가 불완전합니다')
         }
+
+        // 완료
+        setAnalysisStage('complete')
+        setAnalysisPercent(100)
+        setAnalysisMessage('분석 완료!')
         setDiagramData(data)
       } catch (err) {
+        clearInterval(progressInterval)
+        setAnalysisStage('error')
         setDiagramError((err as Error).message)
       } finally {
         setDiagramLoading(false)
@@ -690,33 +740,27 @@ function ProjectContent() {
             코드 구조 시각화
           </h2>
 
-          {/* 로딩 상태 */}
+          {/* 로딩 상태 - Progress Bar */}
           {diagramLoading && (
-            <div
-              data-testid="diagram-loading"
-              style={{
-                padding: '40px',
-                textAlign: 'center',
-                color: '#64748b'
-              }}
-            >
-              <div style={{ fontSize: '24px', marginBottom: '12px' }}>...</div>
-              <p>코드 구조 분석 중...</p>
+            <div data-testid="diagram-loading">
+              <AnalysisProgressBar
+                stage={analysisStage}
+                percent={analysisPercent}
+                message={analysisMessage}
+                error={diagramError || undefined}
+              />
             </div>
           )}
 
-          {/* 에러 상태 */}
-          {diagramError && (
-            <div
-              data-testid="diagram-error"
-              style={{
-                padding: '20px',
-                background: '#fef2f2',
-                borderRadius: '8px',
-                color: '#dc2626',
-              }}
-            >
-              <p style={{ margin: 0 }}>분석 오류: {diagramError}</p>
+          {/* 에러 상태 (로딩 완료 후 에러) */}
+          {!diagramLoading && diagramError && (
+            <div data-testid="diagram-error">
+              <AnalysisProgressBar
+                stage="error"
+                percent={0}
+                message="분석에 실패했습니다"
+                error={diagramError}
+              />
             </div>
           )}
 
