@@ -16,12 +16,15 @@
   "dependencies": {
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.87.1",
+    "@vercel/kv": "^3.0.0",
     "mermaid": "^11.12.2",
     "next": "^14.2.35",
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "skott": "^0.35.6",
+    "source-map-support": "^0.5.21",
     "swr": "^2.3.8",
+    "ts-morph": "^27.0.2",
     "zustand": "^4.5.0"
   },
   "devDependencies": {

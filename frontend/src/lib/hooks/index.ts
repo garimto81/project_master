@@ -4,3 +4,4 @@
 
 export { useAuth } from './useAuth'
 export { useRepositories } from './useRepositories'
+export { useProjectAnalysis, useTriggerAnalysis } from './useProjectAnalysis'
