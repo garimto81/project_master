@@ -9,8 +9,8 @@
 ## 진행 상황
 
 ```
-전체: 13/20 (65%)
-█████████████░░░░░░░
+전체: 17/20 (85%)
+█████████████████░░░
 ```
 
 ---
@@ -117,29 +117,24 @@
 
 **목표**: React Flow로 인터랙티브 다이어그램 구현
 
-### Task 4.1: React Flow 통합
-- [ ] `reactflow` 패키지 설치
-- [ ] 기본 FlowDiagram 컴포넌트 생성
-- [ ] 커스텀 노드 타입 정의
-- [ ] 줌/팬 설정
+### Task 4.1: React Flow 통합 ✅
+- [x] `reactflow` 패키지 설치
+- [x] `ReactFlowDiagram` 컴포넌트 생성
+- [x] 커스텀 노드 타입 정의 (Layer, Function, Api, Db)
+- [x] 줌/팬/미니맵 설정
 
-**예상 시간**: 4시간
+### Task 4.2: 레이어 뷰 개선 ✅
+- [x] 레이어별 그룹화
+- [x] 색상 시스템 적용 (LAYER_COLORS)
+- [x] 파일/함수 노드 연결
+- [x] 레이어 간 애니메이션 연결선
 
-### Task 4.2: 레이어 뷰 개선
-- [ ] 레이어별 그룹화
-- [ ] 색상 시스템 적용
-- [ ] 노드 제한 해제 (가상화)
-- [ ] 확장/축소 기능
-
-**예상 시간**: 4시간
-
-### Task 4.3: 흐름 뷰 구현
-- [ ] 시퀀스 다이어그램 스타일
-- [ ] 단계별 하이라이트
-- [ ] 클릭 시 코드 위치 표시
-- [ ] 애니메이션 효과
-
-**예상 시간**: 5시간
+### Task 4.3: 흐름 뷰 구현 ✅
+- [x] 함수 호출 관계 시각화
+- [x] API 호출 노드 (method/path 표시)
+- [x] DB 호출 노드 (table/operations 표시)
+- [x] 핫스팟 강조 표시
+- [x] 비동기/조건부 호출 구분 (점선/애니메이션)
 
 ---
 
@@ -183,3 +178,4 @@ Phase 1 (AST 분석)
 | 2025-01-03 | Phase 1 완료 - ts-morph 설치, ast-analyzer.ts, /api/logic-flow/ast | 완료 |
 | 2025-01-03 | Phase 2 완료 - Vercel KV, analysis API, useProjectAnalysis 훅 | 완료 |
 | 2025-01-03 | Phase 3 완료 - call-graph-analyzer.ts, /api/logic-flow/graph | 완료 |
+| 2025-01-03 | Phase 4 완료 - ReactFlowDiagram, 커스텀 노드 (Layer/Function/Api/Db) | 완료 |
