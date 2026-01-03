@@ -44,6 +44,11 @@ export async function createServerSupabaseClient() {
  *
  * Supabase Auth 세션의 provider_token만 사용 (하드코딩 폴백 제거)
  *
+ * v6.2 Fix: getSession() 대신 getUser()로 서버 검증
+ * - getSession()은 쿠키에서만 읽어서 만료된 세션도 유효한 것처럼 보임
+ * - getUser()는 Supabase 서버에서 토큰 유효성을 검증함
+ * - GitHub Issue #39: 첫 접속 시 로그인 상태 불일치 (캐시 문제) 수정
+ *
  * @returns GitHub Access Token 또는 null
  */
 export async function getGitHubTokenFromSession(): Promise<{
@@ -56,38 +61,67 @@ export async function getGitHubTokenFromSession(): Promise<{
   } | null
   error: string | null
 }> {
-  // Supabase 세션에서 provider_token 확인
   const supabase = await createServerSupabaseClient()
 
   if (supabase) {
     try {
-      const { data: { session } } = await supabase.auth.getSession()
+      // Step 1: getUser()로 세션 유효성 검증 (서버에서 토큰 검증)
+      const { data: { user: authUser }, error: userError } = await supabase.auth.getUser()
 
-      if (session?.provider_token) {
-        // GitHub 사용자 정보 가져오기
-        const userResponse = await fetch('https://api.github.com/user', {
-          headers: {
-            'Authorization': `Bearer ${session.provider_token}`,
-            'Accept': 'application/vnd.github.v3+json',
-          },
-        })
-
-        if (userResponse.ok) {
-          const userData = await userResponse.json()
-          return {
-            token: session.provider_token,
-            user: {
-              id: session.user.id,
-              email: session.user.email ?? null,
-              login: userData.login,
-              avatar_url: userData.avatar_url,
-            },
-            error: null,
-          }
+      if (userError || !authUser) {
+        // 세션이 만료되었거나 유효하지 않음
+        console.log('[Auth] Session invalid or expired:', userError?.message)
+        return {
+          token: null,
+          user: null,
+          error: 'GitHub 인증이 필요합니다. 로그인해주세요.',
         }
       }
+
+      // Step 2: 검증된 세션에서 provider_token 가져오기
+      const { data: { session } } = await supabase.auth.getSession()
+
+      if (!session?.provider_token) {
+        // 세션은 유효하지만 GitHub 토큰이 없음 (만료됨)
+        console.log('[Auth] Session valid but no provider_token')
+        return {
+          token: null,
+          user: null,
+          error: 'GitHub 토큰이 만료되었습니다. 다시 로그인해주세요.',
+        }
+      }
+
+      // Step 3: GitHub 토큰 유효성 검증
+      const userResponse = await fetch('https://api.github.com/user', {
+        headers: {
+          'Authorization': `Bearer ${session.provider_token}`,
+          'Accept': 'application/vnd.github.v3+json',
+        },
+      })
+
+      if (!userResponse.ok) {
+        // GitHub 토큰이 만료되었거나 유효하지 않음
+        console.log('[Auth] GitHub token invalid:', userResponse.status)
+        return {
+          token: null,
+          user: null,
+          error: 'GitHub 토큰이 만료되었습니다. 다시 로그인해주세요.',
+        }
+      }
+
+      const userData = await userResponse.json()
+      return {
+        token: session.provider_token,
+        user: {
+          id: authUser.id,
+          email: authUser.email ?? null,
+          login: userData.login,
+          avatar_url: userData.avatar_url,
+        },
+        error: null,
+      }
     } catch (e) {
-      console.error('Supabase session error:', e)
+      console.error('[Auth] Supabase session error:', e)
     }
   }
 

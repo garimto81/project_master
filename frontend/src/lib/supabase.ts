@@ -59,6 +59,8 @@ export async function signOut() {
 
 /**
  * 현재 세션 조회
+ * 주의: getSession()은 쿠키에서만 읽어서 만료된 세션도 반환할 수 있음
+ * 세션 유효성 검증이 필요하면 validateSession() 사용
  */
 export async function getSession() {
   if (!supabase) {
@@ -69,7 +71,7 @@ export async function getSession() {
 }
 
 /**
- * 현재 사용자 조회
+ * 현재 사용자 조회 (서버에서 토큰 검증)
  */
 export async function getUser() {
   if (!supabase) {
@@ -77,6 +79,75 @@ export async function getUser() {
   }
   const { data: { user } } = await supabase.auth.getUser()
   return user
+}
+
+/**
+ * 세션 유효성 검증 (GitHub Issue #39 수정)
+ *
+ * getSession()은 쿠키에서만 읽어서 만료된 세션도 유효한 것처럼 보임
+ * 이 함수는 서버에서 토큰을 검증하고, 무효한 세션이면 자동 로그아웃
+ *
+ * @returns { valid: boolean, user: User | null, shouldLogout: boolean }
+ */
+export async function validateSession(): Promise<{
+  valid: boolean
+  user: { id: string; email: string | null } | null
+  shouldLogout: boolean
+}> {
+  if (!supabase) {
+    return { valid: false, user: null, shouldLogout: false }
+  }
+
+  try {
+    // Step 1: 쿠키에서 세션 확인 (빠른 체크)
+    const { data: { session } } = await supabase.auth.getSession()
+
+    if (!session) {
+      // 세션 없음 - 로그아웃 상태
+      return { valid: false, user: null, shouldLogout: false }
+    }
+
+    // Step 2: 서버에서 사용자 검증 (토큰 유효성 확인)
+    const { data: { user }, error } = await supabase.auth.getUser()
+
+    if (error || !user) {
+      // 세션이 쿠키에 있지만 유효하지 않음 - 자동 로그아웃 필요
+      console.log('[Supabase] Session cookie exists but invalid:', error?.message)
+      return { valid: false, user: null, shouldLogout: true }
+    }
+
+    // Step 3: provider_token 확인 (GitHub 토큰)
+    if (!session.provider_token) {
+      // Supabase 세션은 유효하지만 GitHub 토큰이 없음
+      console.log('[Supabase] No provider_token - GitHub token expired')
+      return { valid: false, user: null, shouldLogout: true }
+    }
+
+    return {
+      valid: true,
+      user: { id: user.id, email: user.email ?? null },
+      shouldLogout: false,
+    }
+  } catch (e) {
+    console.error('[Supabase] validateSession error:', e)
+    return { valid: false, user: null, shouldLogout: false }
+  }
+}
+
+/**
+ * 세션 검증 후 필요시 자동 로그아웃
+ * 컴포넌트에서 useEffect로 호출
+ */
+export async function checkAndHandleSession(): Promise<boolean> {
+  const { valid, shouldLogout } = await validateSession()
+
+  if (shouldLogout) {
+    console.log('[Supabase] Auto logout due to invalid session')
+    await signOut()
+    return false
+  }
+
+  return valid
 }
 
 /**
