@@ -151,6 +151,7 @@ function VisualizationContent() {
     isReady: isCacheReady,
     progress: cacheProgress,
     error: cacheError,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     refresh: _refreshAnalysis, // 향후 새로고침 버튼에 연결 예정
   } = useProjectAnalysis(selectedRepo || '')
 
