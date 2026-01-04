@@ -461,12 +461,46 @@ export async function POST(request: NextRequest) {
     // 자동 경로 탐지: 기본 경로에 파일이 없으면 일반적인 경로 시도
     let detectedPath = path
     if (allCodeFiles.length === 0 && path === 'src/') {
-      const commonPaths = ['web/src/', 'app/src/', 'packages/', 'apps/', 'src/', 'lib/', '']
+      // 제외할 디렉토리 패턴 (node_modules, 빌드 결과물, Git, 테스트)
+      const excludePatterns = [
+        'node_modules/',
+        'dist/',
+        'build/',
+        '.next/',
+        'out/',
+        '.git/',
+        'coverage/',
+        '__tests__/',
+        'test/',
+        'tests/',
+        '.cache/',
+        'public/',
+        'static/',
+      ]
+
+      // 일반적인 소스 코드 경로 (우선순위 순)
+      const commonPaths = [
+        'web/src/',      // Monorepo: web app
+        'frontend/src/', // Frontend/Backend 분리
+        'app/src/',      // Mobile app 구조
+        'client/src/',   // Client/Server 분리
+        'server/src/',   // Server 코드
+        'backend/src/',  // Backend 코드
+        'packages/',     // Yarn/pnpm workspace
+        'apps/',         // Nx/Turborepo
+        'src/',          // 표준
+        'lib/',          // 라이브러리
+      ]
+
+      const shouldExclude = (path: string): boolean => {
+        return excludePatterns.some(pattern => path.includes(pattern))
+      }
 
       for (const tryPath of commonPaths) {
         const files = (treeData.tree || []).filter((item: GitHubTreeItem) =>
           item.type === 'blob' &&
-          (tryPath === '' || item.path.startsWith(tryPath)) &&
+          item.path.startsWith(tryPath) &&
+          !shouldExclude(item.path) &&
           (item.path.endsWith('.ts') || item.path.endsWith('.tsx') ||
            item.path.endsWith('.js') || item.path.endsWith('.jsx') ||
            item.path.endsWith('.py'))
@@ -475,7 +509,7 @@ export async function POST(request: NextRequest) {
         if (files.length > 0) {
           allCodeFiles = files
           detectedPath = tryPath
-          console.log(`[Auto Path Detection] Found ${files.length} files in "${tryPath || '(root)'}"`)
+          console.log(`[Auto Path Detection] Found ${files.length} files in "${tryPath}"`)
           break
         }
       }
@@ -488,8 +522,20 @@ export async function POST(request: NextRequest) {
         details: {
           repo,
           searchedPath: path,
-          suggestion: '레포지토리에 TypeScript, JavaScript, Python 파일이 있는지 확인해주세요.',
-          commonPaths: ['src/', 'web/src/', 'app/', 'lib/'],
+          suggestion: '다음을 확인해주세요:\n' +
+            '1. 레포지토리에 TypeScript, JavaScript, Python 파일이 있는지\n' +
+            '2. 파일이 일반적인 경로에 있는지 (아래 목록 참조)\n' +
+            '3. 특이한 경로인 경우 URL에 ?path=your/custom/path 파라미터 추가',
+          commonPaths: [
+            'src/', 'web/src/', 'frontend/src/', 'backend/src/',
+            'client/src/', 'server/src/', 'app/src/',
+            'packages/', 'apps/', 'lib/'
+          ],
+          excludedPaths: [
+            'node_modules/', 'dist/', 'build/', '.next/',
+            '.git/', 'coverage/', 'test/', 'public/'
+          ],
+          example: `${repo}?path=your/custom/path`
         }
       }, { status: 404 })
     }
