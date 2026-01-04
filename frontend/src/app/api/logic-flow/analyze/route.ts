@@ -449,14 +449,50 @@ export async function POST(request: NextRequest) {
       data: [],
     }
 
-    // 모든 코드 파일 필터링
-    const allCodeFiles = (treeData.tree || []).filter((item: GitHubTreeItem) =>
+    // 모든 코드 파일 필터링 (자동 경로 탐지 지원)
+    let allCodeFiles = (treeData.tree || []).filter((item: GitHubTreeItem) =>
       item.type === 'blob' &&
       item.path.startsWith(path.replace(/^\//, '')) &&
       (item.path.endsWith('.ts') || item.path.endsWith('.tsx') ||
        item.path.endsWith('.js') || item.path.endsWith('.jsx') ||
        item.path.endsWith('.py'))
     )
+
+    // 자동 경로 탐지: 기본 경로에 파일이 없으면 일반적인 경로 시도
+    let detectedPath = path
+    if (allCodeFiles.length === 0 && path === 'src/') {
+      const commonPaths = ['web/src/', 'app/src/', 'packages/', 'apps/', 'src/', 'lib/', '']
+
+      for (const tryPath of commonPaths) {
+        const files = (treeData.tree || []).filter((item: GitHubTreeItem) =>
+          item.type === 'blob' &&
+          (tryPath === '' || item.path.startsWith(tryPath)) &&
+          (item.path.endsWith('.ts') || item.path.endsWith('.tsx') ||
+           item.path.endsWith('.js') || item.path.endsWith('.jsx') ||
+           item.path.endsWith('.py'))
+        )
+
+        if (files.length > 0) {
+          allCodeFiles = files
+          detectedPath = tryPath
+          console.log(`[Auto Path Detection] Found ${files.length} files in "${tryPath || '(root)'}"`)
+          break
+        }
+      }
+    }
+
+    // 빈 결과 검증
+    if (allCodeFiles.length === 0) {
+      return NextResponse.json({
+        error: '분석 가능한 코드 파일을 찾을 수 없습니다',
+        details: {
+          repo,
+          searchedPath: path,
+          suggestion: '레포지토리에 TypeScript, JavaScript, Python 파일이 있는지 확인해주세요.',
+          commonPaths: ['src/', 'web/src/', 'app/', 'lib/'],
+        }
+      }, { status: 404 })
+    }
 
     // 샘플링 전략: 레포 크기에 따라 동적으로 샘플링
     const MAX_FILES = depth === 'full' ? 100 : depth === 'medium' ? 50 : 20
@@ -808,6 +844,8 @@ export async function POST(request: NextRequest) {
       mermaid_code: mermaidLines.join('\n'),
       stats,
       summary: `${repo}: ${layers.length}개 레이어, ${allImports.length}개 의존성, ${circularDependencies.length}개 순환, ${riskPoints.length}개 위험 지점`,
+      // 자동 경로 탐지 정보
+      ...(detectedPath !== path && { detectedPath, requestedPath: path }),
     }
 
     // 결과 캐싱 (재방문 즉시 로드)
