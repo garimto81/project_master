@@ -6,7 +6,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getGitHubTokenFromSession } from '@/lib/auth'
+import { requireGitHubAuth, updateIssueState, errorResponse } from '@/lib/github-utils'
 
 interface Params {
   params: Promise<{
@@ -17,56 +17,27 @@ interface Params {
 export async function PATCH(request: NextRequest, { params }: Params) {
   try {
     const { number } = await params
+    const issueNumber = parseInt(number, 10)
 
-    // 인증 확인 (사용자별 GitHub 토큰)
-    const { token, user, error } = await getGitHubTokenFromSession()
+    // 인증 확인
+    const auth = await requireGitHubAuth()
+    if (auth.error) return auth.error
 
-    if (!token || !user) {
-      return NextResponse.json(
-        {
-          error: error || 'GitHub 인증이 필요합니다',
-          authenticated: false,
-        },
-        { status: 401 }
-      )
-    }
-
-    const searchParams = request.nextUrl.searchParams
-    const repo = searchParams.get('repo')
-
+    const repo = request.nextUrl.searchParams.get('repo')
     if (!repo) {
-      return NextResponse.json(
-        { error: 'repo 파라미터가 필요합니다' },
-        { status: 400 }
-      )
+      return errorResponse('repo 파라미터가 필요합니다', 400)
     }
 
-    const response = await fetch(
-      `https://api.github.com/repos/${repo}/issues/${number}`,
-      {
-        method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Accept': 'application/vnd.github.v3+json',
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ state: 'closed' }),
-      }
-    )
+    const [owner, repoName] = repo.split('/')
+    const result = await updateIssueState(owner, repoName, issueNumber, 'closed', auth.token!)
 
-    if (!response.ok) {
-      return NextResponse.json(
-        { error: `Failed to close issue: #${number}` },
-        { status: response.status }
-      )
+    if (!result.success) {
+      return errorResponse(result.error || `Failed to close issue: #${number}`, 400)
     }
 
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error('Close issue API error:', error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to close issue' },
-      { status: 500 }
-    )
+    return errorResponse('Failed to close issue', 500, error)
   }
 }
