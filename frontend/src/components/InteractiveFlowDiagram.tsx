@@ -66,6 +66,86 @@ const LAYER_ICONS: Record<string, string> = {
   data: '💾',
 }
 
+// 이슈 #45: 레이어 간 기본 인과관계 라벨
+const LAYER_FLOW_LABELS: Record<string, string> = {
+  'ui→logic': '사용자 입력 전달',
+  'logic→server': '처리된 요청 전송',
+  'server→data': '응답 데이터 저장',
+  'data→ui': '화면에 결과 표시',
+  'ui→server': 'API 요청',
+  'logic→data': '상태 업데이트',
+}
+
+// 이슈 #45: 모듈명 → 자연어 설명 변환 (비개발자 친화)
+const MODULE_DESCRIPTIONS: Record<string, string> = {
+  // 공통 패턴
+  page: '화면 페이지',
+  layout: '화면 레이아웃',
+  header: '상단 메뉴',
+  footer: '하단 정보',
+  sidebar: '측면 메뉴',
+  modal: '팝업 창',
+  form: '입력 양식',
+  button: '버튼',
+  input: '입력 필드',
+  card: '카드 컴포넌트',
+  list: '목록 표시',
+  table: '표 형식 데이터',
+  // 기능별
+  auth: '로그인/인증',
+  login: '로그인 처리',
+  logout: '로그아웃 처리',
+  register: '회원가입',
+  profile: '프로필 관리',
+  settings: '설정',
+  dashboard: '대시보드',
+  home: '홈 화면',
+  search: '검색 기능',
+  filter: '필터링',
+  sort: '정렬',
+  // 데이터
+  api: 'API 통신',
+  fetch: '데이터 가져오기',
+  store: '데이터 저장소',
+  cache: '캐시 관리',
+  utils: '유틸리티',
+  helpers: '도우미 함수',
+  hooks: '상태 관리',
+  context: '전역 상태',
+  // 시각화 관련
+  diagram: '다이어그램',
+  chart: '차트',
+  graph: '그래프',
+  visualization: '시각화',
+  mermaid: '흐름도',
+  flow: '데이터 흐름',
+}
+
+// 모듈명에서 자연어 설명 추출
+function getModuleDescription(moduleName: string): string {
+  const lowerName = moduleName.toLowerCase()
+
+  // 정확히 매칭
+  if (MODULE_DESCRIPTIONS[lowerName]) {
+    return MODULE_DESCRIPTIONS[lowerName]
+  }
+
+  // 부분 매칭
+  for (const [key, desc] of Object.entries(MODULE_DESCRIPTIONS)) {
+    if (lowerName.includes(key)) {
+      return desc
+    }
+  }
+
+  // CamelCase 분리
+  const words = moduleName.replace(/([A-Z])/g, ' $1').trim().split(' ')
+  if (words.length > 1) {
+    return words.join(' ')
+  }
+
+  return moduleName
+}
+
 // Phase 2: 사용자 여정 설명 (이슈 #41)
 const LAYER_JOURNEY_DESC: Record<string, { action: string; example: string; result: string }> = {
   ui: {
@@ -640,50 +720,89 @@ export default function InteractiveFlowDiagram({
                         gap: '8px',
                       }}
                     >
-                      {layer.modules.map((mod) => (
-                        <button
-                          key={mod}
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            onModuleClick?.(mod, layer)
-                          }}
-                          style={{
-                            padding: '8px 12px',
-                            background: '#fff',
-                            border: `1px solid ${colors.border}60`,
-                            borderRadius: '6px',
-                            cursor: 'pointer',
-                            fontSize: '13px',
-                            color: colors.text,
-                            textAlign: 'left',
-                            transition: 'all 0.15s',
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.background = colors.bg
-                            e.currentTarget.style.borderColor = colors.border
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.background = '#fff'
-                            e.currentTarget.style.borderColor = `${colors.border}60`
-                          }}
-                        >
-                          {mod}
-                        </button>
-                      ))}
+                      {/* 이슈 #45: 모듈에 자연어 설명 추가 */}
+                      {layer.modules.map((mod) => {
+                        const description = getModuleDescription(mod)
+                        const hasDescription = description !== mod
+
+                        return (
+                          <button
+                            key={mod}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              onModuleClick?.(mod, layer)
+                            }}
+                            title={hasDescription ? `${description} (${mod})` : mod}
+                            style={{
+                              padding: '8px 12px',
+                              background: '#fff',
+                              border: `1px solid ${colors.border}60`,
+                              borderRadius: '6px',
+                              cursor: 'pointer',
+                              fontSize: '13px',
+                              color: colors.text,
+                              textAlign: 'left',
+                              transition: 'all 0.15s',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '2px',
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.background = colors.bg
+                              e.currentTarget.style.borderColor = colors.border
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.background = '#fff'
+                              e.currentTarget.style.borderColor = `${colors.border}60`
+                            }}
+                          >
+                            {/* 자연어 설명 (있을 경우) */}
+                            {hasDescription && (
+                              <span style={{ fontSize: '12px', fontWeight: 500 }}>
+                                {description}
+                              </span>
+                            )}
+                            {/* 원본 모듈명 */}
+                            <span style={{
+                              fontSize: hasDescription ? '10px' : '13px',
+                              color: hasDescription ? '#94a3b8' : colors.text,
+                              fontFamily: hasDescription ? 'monospace' : 'inherit',
+                            }}>
+                              {mod}
+                            </span>
+                          </button>
+                        )
+                      })}
                     </div>
                   )}
                 </div>
 
-                {/* 화살표 (레이어 간) */}
+                {/* 화살표 (레이어 간) - 이슈 #45: 인과관계 라벨 개선 */}
                 {index < layers.length - 1 && (
                   <div style={{ display: 'flex', justifyContent: 'center', margin: '8px 0' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                       <div style={{ fontSize: '20px', color: '#94a3b8' }}>↓</div>
-                      {connections.find(c => c.from === layer.name) && (
-                        <div style={{ fontSize: '11px', color: '#64748b', marginTop: '-4px' }}>
-                          {connections.find(c => c.from === layer.name)?.label}
-                        </div>
-                      )}
+                      {(() => {
+                        // 명시적 connection 라벨 또는 기본 인과관계 라벨
+                        const nextLayer = layers[index + 1]
+                        const connection = connections.find(c => c.from === layer.name && c.to === nextLayer?.name)
+                        const flowKey = `${layer.name}→${nextLayer?.name}`
+                        const label = connection?.label || LAYER_FLOW_LABELS[flowKey] || ''
+
+                        return label ? (
+                          <div style={{
+                            fontSize: '11px',
+                            color: '#3b82f6',
+                            marginTop: '-4px',
+                            padding: '2px 8px',
+                            background: '#eff6ff',
+                            borderRadius: '10px',
+                            fontWeight: 500,
+                          }}>
+                            {label}
+                          </div>
+                        ) : null
+                      })()}
                     </div>
                   </div>
                 )}
