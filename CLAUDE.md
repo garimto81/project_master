@@ -148,11 +148,42 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGci...
 - Playwright E2E 테스트 필수
 - Mermaid 다이어그램은 `MermaidDiagram` 컴포넌트 사용 (`'use client'`)
 
+## Technology Stack
+
+### Frontend (Primary)
+- **Framework**: Next.js 14.2.35 (App Router, Server Components)
+- **Runtime**: Node.js + TypeScript 5
+- **UI**: React 18.3.1 (no Tailwind - inline CSS)
+- **Visualization**: Mermaid 11.12.2, React Flow 11.11.4
+- **Code Analysis**: skott 0.35.6 (AST), ts-morph 27.0.2
+- **State**: Zustand 4.5.0
+- **Data Fetching**: SWR 2.3.8
+- **Auth**: @supabase/ssr 0.8.0
+- **Testing**: Playwright 1.40.0 (E2E only, Chromium)
+
+### Backend (레거시)
+- FastAPI (Python 3.11+) - 사용 비권장
+- 새 기능은 Next.js API Routes 사용
+
+## Current Development Status
+
+**Latest PRD**: `tasks/prds/0007-prd-diagram-redesign.md` (v1.3)
+**Current Phase**: Phase 5 - Progress Bar 구현 중
+**Recent Features**:
+- ReactFlowDiagram 통합 (c76cf37)
+- 비개발자 친화적 2단 라벨 (🔐 로그인 / LoginPage)
+- 함수명 변환 유틸리티 (50+ 키워드 매핑)
+
+**Active Issues**:
+- [#40](https://github.com/garimto81/project_master/issues/40) 코드 분석 진행 표시 (P1)
+- [#41](https://github.com/garimto81/project_master/issues/41) 다이어그램 직관화 추가 개선 (P2)
+
 ## Docs
 
-- PRD: `tasks/prds/0005-prd-devflow-ai-collaboration.md`
-- Supabase 설정: `frontend/docs/SUPABASE_SETUP.md`
-- 테스트 계획: `tasks/prds/0004-tdd-test-plan.md`
+- **Main PRD**: `tasks/prds/0005-prd-devflow-ai-collaboration.md`
+- **Latest Design**: `tasks/prds/0007-prd-diagram-redesign.md` (v1.3)
+- **Supabase 설정**: `frontend/docs/SUPABASE_SETUP.md`
+- **테스트 계획**: `tasks/prds/0004-tdd-test-plan.md`
 
 ## Additional Architecture Notes
 
@@ -187,3 +218,105 @@ Zustand 사용 (`zustand` v4.5). 별도 store 파일은 필요 시 `src/lib/` �
 `lib/colors.ts`에서 중앙 관리:
 - `LAYER_COLORS`: Mermaid 다이어그램 레이어 색상
 - `VISUALIZATION_LIMITS`: 노드/엣지 표시 제한 (성능 최적화)
+  - `MAX_NODES_DISPLAY`: 8 (최대 노드 표시)
+  - `MAX_EDGES_DISPLAY`: 30 (최대 엣지 표시)
+  - `MAX_CIRCULAR_DEPS_DISPLAY`: 3 (순환 의존성 강조)
+  - `MAX_MODULES_PER_LAYER`: 4 (레이어당 모듈 수)
+
+## Performance Optimizations
+
+### Caching Strategy
+- **Analysis Cache** (`analysis-cache.ts`): GitHub tree 캐싱
+- **SWR Client Cache**: Session 및 repos (30초 dedup interval)
+- **Diagram Cache** (`diagramCache.ts`): Mermaid 렌더링 캐시
+- **Lazy Loading** (`lazyLoader.ts`): 점진적 컴포넌트 로딩
+
+### Sampling-Based Analysis
+- 작은 레포 (<100 파일): 전체 분석
+- 큰 레포 (>100 파일): 샘플링 (90% 시간 절감)
+
+## Important Development Patterns
+
+### Custom Hooks Pattern
+```typescript
+// lib/hooks/useAuth.ts
+export function useAuth() {
+  const { data: session } = useSWR('/api/auth/me', ...)
+  return { session, isAuthenticated: !!session }
+}
+```
+
+### API Route Pattern (서버 컴포넌트)
+```typescript
+// app/api/*/route.ts
+import { requireAuth } from '@/lib/auth'
+
+export async function GET(request: Request) {
+  const token = await requireAuth(request)
+  // GitHub API 호출...
+}
+```
+
+### Client Component Pattern (인터랙티브 UI)
+```typescript
+'use client'  // 필수!
+
+export function MermaidDiagram({ code }: Props) {
+  useEffect(() => { ... }, [code])
+  return <div id="mermaid-container">...</div>
+}
+```
+
+## Quick Start for New Claude Instances
+
+1. **읽기 필수** (5분):
+   - 이 파일 (`CLAUDE.md`)
+   - 최신 PRD (`tasks/prds/0007-prd-diagram-redesign.md`)
+   - E2E 테스트 예시 (`frontend/tests/e2e/login.spec.ts`)
+
+2. **핵심 파일** (10분):
+   - `frontend/src/app/page.tsx` - 홈/로그인 페이지
+   - `frontend/src/app/api/logic-flow/analyze/route.ts` - 핵심 분석 API
+   - `frontend/src/components/MermaidDiagram.tsx` - 시각화 컴포넌트
+   - `frontend/src/lib/colors.ts` - 스타일 중앙 관리
+
+3. **개발 시작**:
+   ```powershell
+   cd frontend
+   npm run dev
+   ```
+
+4. **테스트 실행**:
+   ```powershell
+   npm run test:e2e:ui  # UI 모드 (권장)
+   ```
+
+## Common Pitfalls
+
+### ❌ 하지 말아야 할 것
+- `backend/` 폴더에 새 기능 추가 (레거시)
+- 상대 경로 사용 (`./file.ts` 대신 `@/lib/file.ts`)
+- Tailwind CSS 사용 (인라인 CSS 사용)
+- `'use client'` 없이 클라이언트 전용 API 사용 (useState, useEffect 등)
+- 전역 프로세스 종료 (`taskkill /F /IM node.exe`)
+
+### ✅ 해야 할 것
+- Next.js API Routes에 새 API 추가 (`frontend/src/app/api/`)
+- 절대 경로 사용 (`@/lib/...`, `@/components/...`)
+- 인라인 CSS 사용 (`style={{ ... }}`)
+- 서버/클라이언트 컴포넌트 구분 명확히
+- Playwright E2E 테스트 작성 (`data-testid` 사용)
+
+## Key Files Reference
+
+| 파일 | 역할 | 환경 |
+|------|------|------|
+| `frontend/src/app/page.tsx` | 홈/로그인 페이지 | Server + Client |
+| `frontend/src/app/project/page.tsx` | 프로젝트 상세 | Server + Client |
+| `frontend/src/app/api/logic-flow/analyze/route.ts` | 코드 분석 API (핵심) | Server |
+| `frontend/src/components/MermaidDiagram.tsx` | 다이어그램 렌더링 | Client |
+| `frontend/src/lib/auth.ts` | 서버 인증 헬퍼 | Server |
+| `frontend/src/lib/supabase.ts` | 클라이언트 인증 | Client |
+| `frontend/src/lib/skott-analyzer.ts` | AST 분석 (Node.js) | Server |
+| `frontend/src/lib/colors.ts` | 스타일 중앙 관리 | Shared |
+| `frontend/src/lib/hooks/useAuth.ts` | 인증 Hook (SWR) | Client |
