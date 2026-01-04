@@ -16,6 +16,7 @@ interface AnalysisProgressBarProps {
   filesProcessed?: number
   totalFiles?: number
   error?: string
+  onCancel?: () => void  // 취소 콜백
 }
 
 // 단계별 설정
@@ -35,6 +36,7 @@ export function AnalysisProgressBar({
   filesProcessed,
   totalFiles,
   error,
+  onCancel,
 }: AnalysisProgressBarProps) {
   const [showTip, setShowTip] = useState(false)
   const config = STAGE_CONFIG[stage]
@@ -134,6 +136,37 @@ export function AnalysisProgressBar({
           <span>💡</span>
           <span>프로젝트가 크면 분석에 시간이 더 걸릴 수 있습니다.</span>
         </div>
+      )}
+
+      {/* 취소 버튼 */}
+      {onCancel && stage !== 'complete' && stage !== 'error' && (
+        <button
+          onClick={onCancel}
+          data-testid="analysis-cancel-btn"
+          style={{
+            marginTop: '16px',
+            padding: '10px 20px',
+            background: '#f1f5f9',
+            border: '1px solid #e2e8f0',
+            borderRadius: '8px',
+            color: '#64748b',
+            fontSize: '14px',
+            fontWeight: 500,
+            cursor: 'pointer',
+            width: '100%',
+            transition: 'all 0.2s ease',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = '#e2e8f0'
+            e.currentTarget.style.color = '#475569'
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = '#f1f5f9'
+            e.currentTarget.style.color = '#64748b'
+          }}
+        >
+          분석 취소
+        </button>
       )}
 
       {/* 단계 인디케이터 */}

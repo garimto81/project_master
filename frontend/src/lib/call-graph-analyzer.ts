@@ -732,3 +732,154 @@ export function generateCallGraphMermaid(result: CallGraphResult): string {
 function sanitizeId(id: string): string {
   return id.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 50)
 }
+
+// ============================================================
+// Phase 2: 에러 전파 분석 (이슈 #43)
+// ============================================================
+
+export interface ErrorPropagation {
+  functionId: string
+  functionName: string
+  file: string
+  line: number
+  hasErrorHandling: boolean
+  hasTryCatch: boolean
+  hasAsyncErrorHandling: boolean
+  propagatesToCallers: boolean
+  riskLevel: 'safe' | 'warning' | 'danger'
+  riskReason?: string
+}
+
+export interface RiskPoint {
+  path: string
+  line?: number
+  type: 'try-catch' | 'null-check' | 'error-boundary' | 'async-await' | 'type-assertion'
+  severity: 'high' | 'medium' | 'low'
+  description?: string
+}
+
+/**
+ * 에러 전파 분석 - 각 함수의 에러 처리 상태를 분석
+ */
+export function analyzeErrorPropagation(
+  callGraph: CallGraphResult,
+  riskPoints: RiskPoint[]
+): ErrorPropagation[] {
+  const result: ErrorPropagation[] = []
+  const riskMap = new Map<string, RiskPoint[]>()
+
+  // 파일별 위험 지점 매핑
+  for (const rp of riskPoints) {
+    const existing = riskMap.get(rp.path) || []
+    existing.push(rp)
+    riskMap.set(rp.path, existing)
+  }
+
+  // 호출 관계 역 인덱스 구축 (누가 나를 호출하는지)
+  const calledByMap = new Map<string, string[]>()
+  for (const edge of callGraph.edges) {
+    const existing = calledByMap.get(edge.toId) || []
+    existing.push(edge.fromId)
+    calledByMap.set(edge.toId, existing)
+  }
+
+  for (const node of callGraph.nodes) {
+    const fileRisks = riskMap.get(node.file) || []
+    const nodeRisks = fileRisks.filter(r => {
+      if (!r.line) return true
+      // 함수 범위 내에 있는 위험 지점만
+      return r.line >= node.line && r.line <= node.line + 50
+    })
+
+    const hasTryCatch = nodeRisks.every(r => r.type !== 'try-catch')
+    const hasAsyncErrorHandling = node.isAsync ? nodeRisks.every(r => r.type !== 'async-await') : true
+    const hasErrorHandling = hasTryCatch && hasAsyncErrorHandling
+
+    // 호출자에게 에러가 전파되는지 확인
+    const callers = calledByMap.get(node.id) || []
+    const propagatesToCallers = !hasErrorHandling && callers.length > 0
+
+    // 위험 수준 결정
+    let riskLevel: 'safe' | 'warning' | 'danger' = 'safe'
+    let riskReason: string | undefined
+
+    if (nodeRisks.some(r => r.severity === 'high')) {
+      riskLevel = 'danger'
+      riskReason = 'High severity risk detected'
+    } else if (nodeRisks.some(r => r.severity === 'medium') || propagatesToCallers) {
+      riskLevel = 'warning'
+      riskReason = propagatesToCallers
+        ? 'Errors may propagate to callers'
+        : 'Medium severity risk detected'
+    }
+
+    result.push({
+      functionId: node.id,
+      functionName: node.name,
+      file: node.file,
+      line: node.line,
+      hasErrorHandling,
+      hasTryCatch,
+      hasAsyncErrorHandling,
+      propagatesToCallers,
+      riskLevel,
+      riskReason,
+    })
+  }
+
+  return result
+}
+
+/**
+ * 에러 전파 경로 추적 - 위험 지점에서 시작하여 호출자까지 역추적
+ */
+export function traceErrorPropagation(
+  callGraph: CallGraphResult,
+  riskPoints: RiskPoint[]
+): string[][] {
+  const paths: string[][] = []
+
+  // 호출 관계 역 인덱스
+  const calledByMap = new Map<string, string[]>()
+  for (const edge of callGraph.edges) {
+    const existing = calledByMap.get(edge.toId) || []
+    existing.push(edge.fromId)
+    calledByMap.set(edge.toId, existing)
+  }
+
+  // 위험 지점이 있는 함수 찾기
+  for (const rp of riskPoints.filter(r => r.severity === 'high')) {
+    const dangerFunctions = callGraph.nodes.filter(n => {
+      return n.file === rp.path || n.file.includes(rp.path.replace('.ts', ''))
+    })
+
+    for (const func of dangerFunctions) {
+      const path = [func.id]
+      const visited = new Set<string>([func.id])
+
+      // BFS로 호출자 추적 (최대 5단계)
+      let current = [func.id]
+      for (let depth = 0; depth < 5; depth++) {
+        const nextLevel: string[] = []
+        for (const id of current) {
+          const callers = calledByMap.get(id) || []
+          for (const caller of callers) {
+            if (!visited.has(caller)) {
+              visited.add(caller)
+              nextLevel.push(caller)
+              path.push(caller)
+            }
+          }
+        }
+        if (nextLevel.length === 0) break
+        current = nextLevel
+      }
+
+      if (path.length > 1) {
+        paths.push(path)
+      }
+    }
+  }
+
+  return paths.slice(0, 10) // 최대 10개 경로
+}

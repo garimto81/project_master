@@ -11,17 +11,26 @@
  * Level 3: 함수 실행 흐름
  */
 
-import { useState, useEffect, useCallback, Suspense } from 'react'
+import { useState, useEffect, useCallback, Suspense, useMemo } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import { signInWithGitHub } from '@/lib/supabase'
+import type { AnalysisResult, RiskPoint as TypedRiskPoint, Layer as TypedLayer } from '@/lib/types'
 
 // 클라이언트 컴포넌트 동적 로드
 const MermaidDiagram = dynamic(
   () => import('@/components/MermaidDiagram'),
   { ssr: false }
 )
+
+const AnalysisProgressBar = dynamic(
+  () => import('@/components/visualization/AnalysisProgressBar'),
+  { ssr: false }
+)
+
+// AnalysisStage 타입 정의
+type AnalysisStage = 'fetching' | 'scanning' | 'analyzing' | 'building' | 'complete' | 'error'
 
 const InteractiveFlowDiagram = dynamic(
   () => import('@/components/InteractiveFlowDiagram'),
@@ -30,6 +39,11 @@ const InteractiveFlowDiagram = dynamic(
 
 const StepPlayer = dynamic(
   () => import('@/components/logic-flow/StepPlayer'),
+  { ssr: false }
+)
+
+const ErrorTrace = dynamic(
+  () => import('@/components/visualization/ErrorTrace'),
   { ssr: false }
 )
 
@@ -128,6 +142,11 @@ function VisualizationContent() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // Phase 1: 분석 진행률 상태 (이슈 #42)
+  const [analysisStage, setAnalysisStage] = useState<AnalysisStage>('fetching')
+  const [analysisPercent, setAnalysisPercent] = useState(0)
+  const [abortController, setAbortController] = useState<AbortController | null>(null)
+
   // 브레드크럼 생성
   const breadcrumbs = [
     { label: owner, level: 'repos' as ViewLevel },
@@ -158,10 +177,51 @@ function VisualizationContent() {
   }, [owner])
 
   const loadAnalyze = useCallback(async () => {
+    // 이전 요청 취소
+    if (abortController) {
+      abortController.abort()
+    }
+
+    const controller = new AbortController()
+    setAbortController(controller)
+
     setLoading(true)
     setError(null)
-    setAnalyzeData(null)  // 명시적 초기화
+    setAnalyzeData(null)
+    setAnalysisStage('fetching')
+    setAnalysisPercent(10)
+
+    // 120초 타임아웃 설정
+    const timeoutId = setTimeout(() => {
+      controller.abort()
+      setAnalysisStage('error')
+      setError('분석 시간이 초과되었습니다 (120초). 더 작은 프로젝트로 시도하거나 다시 시도해주세요.')
+    }, 120000)
+
     try {
+      // Phase 1: 빠른 스캔 (점진적 로딩 - 1초 목표)
+      setAnalysisStage('scanning')
+      setAnalysisPercent(15)
+
+      const quickRes = await fetch('/api/logic-flow/analyze/quick', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ repo: selectedRepo }),
+        signal: controller.signal,
+      })
+
+      if (quickRes.ok) {
+        const quickData = await quickRes.json()
+        if (quickData?.data_flow?.layers) {
+          setAnalyzeData(quickData)  // 빠른 결과 먼저 표시
+          setAnalysisPercent(30)
+        }
+      }
+
+      // Phase 2: 상세 분석 (백그라운드)
+      setAnalysisStage('analyzing')
+      setAnalysisPercent(40)
+
       const res = await fetch('/api/logic-flow/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -170,12 +230,18 @@ function VisualizationContent() {
           depth: 'medium',
           include_risk: true,
         }),
+        signal: controller.signal,
       })
+
+      setAnalysisPercent(70)
 
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
         throw new Error(data.error || `코드 분석 실패 (HTTP ${res.status})`)
       }
+
+      setAnalysisStage('building')
+      setAnalysisPercent(85)
 
       const data = await res.json()
 
@@ -184,15 +250,27 @@ function VisualizationContent() {
         throw new Error('분석 데이터가 불완전합니다. 다시 시도해주세요.')
       }
 
-      setAnalyzeData(data)
+      setAnalysisStage('complete')
+      setAnalysisPercent(100)
+      setAnalyzeData(data)  // 상세 결과로 업데이트
     } catch (err) {
       const error = err as Error
-      console.error('loadAnalyze error:', error)
-      setError(error.message || '알 수 없는 오류가 발생했습니다.')
+      if (error.name === 'AbortError') {
+        // 사용자가 취소했거나 타임아웃
+        if (!controller.signal.aborted) {
+          setError('분석이 취소되었습니다.')
+        }
+      } else {
+        console.error('loadAnalyze error:', error)
+        setError(error.message || '알 수 없는 오류가 발생했습니다.')
+      }
+      setAnalysisStage('error')
     } finally {
+      clearTimeout(timeoutId)
       setLoading(false)
+      setAbortController(null)
     }
-  }, [selectedRepo])
+  }, [selectedRepo, abortController])
 
   // Level 0: 레포 목록 로드
   useEffect(() => {
@@ -262,6 +340,57 @@ function VisualizationContent() {
     setSelectedFunction(funcName)
     setViewLevel('function')
   }
+
+  // analyzeData를 AnalysisResult 형식으로 변환 (Phase 2: ErrorTrace 통합)
+  const analysisResultForErrorTrace: AnalysisResult | null = useMemo(() => {
+    if (!analyzeData) return null
+
+    // risk_points를 TypedRiskPoint 형식으로 변환
+    const riskPoints: TypedRiskPoint[] = analyzeData.risk_points.map(rp => ({
+      path: rp.location.split(':')[0],
+      type: 'try-catch' as const,
+      line: parseInt(rp.location.split(':')[1]) || undefined,
+      severity: rp.risk,
+      description: rp.reason,
+    }))
+
+    // layers를 TypedLayer 형식으로 변환
+    // LayerType: 'ui' | 'logic' | 'server' | 'api' | 'data' | 'lib' | 'unknown'
+    const mapToLayerType = (name: string): 'ui' | 'logic' | 'server' | 'api' | 'data' | 'lib' | 'unknown' => {
+      if (['ui', 'logic', 'server', 'api', 'data', 'lib'].includes(name)) {
+        return name as 'ui' | 'logic' | 'server' | 'api' | 'data' | 'lib'
+      }
+      return 'unknown'
+    }
+
+    const layers: TypedLayer[] = analyzeData.data_flow.layers.map(l => ({
+      name: l.name,
+      type: mapToLayerType(l.name),
+      modules: l.modules.map(modName => ({
+        name: modName,
+        path: modName,
+        type: mapToLayerType(l.name),
+      })),
+      description: l.description,
+    }))
+
+    return {
+      layers,
+      connections: [],
+      circularDependencies: analyzeData.circular_dependencies || [],
+      riskPoints,
+      stats: {
+        totalFiles: analyzeData.stats?.totalFiles || 0,
+        totalModules: layers.reduce((sum, l) => sum + l.modules.length, 0),
+        totalFunctions: 0,
+        totalDependencies: analyzeData.stats?.totalDependencies || 0,
+        circularCount: analyzeData.stats?.circularCount || 0,
+        riskCount: riskPoints.length,
+        layerCoverage: {} as Record<string, number>,
+      },
+      mermaidCode: analyzeData.mermaid_code,
+    }
+  }, [analyzeData])
 
   // 뒤로가기
   function handleBack() {
@@ -456,8 +585,26 @@ function VisualizationContent() {
           </div>
         )}
 
-        {/* 로딩 */}
-        {loading && (
+        {/* 로딩 - Phase 1: AnalysisProgressBar 사용 (이슈 #42) */}
+        {loading && viewLevel === 'big-picture' && (
+          <AnalysisProgressBar
+            stage={analysisStage}
+            percent={analysisPercent}
+            message={selectedRepo ? `${selectedRepo} 분석 중...` : undefined}
+            error={error || undefined}
+            onCancel={() => {
+              if (abortController) {
+                abortController.abort()
+                setError('분석이 취소되었습니다.')
+                setAnalysisStage('error')
+                setLoading(false)
+              }
+            }}
+          />
+        )}
+
+        {/* 기본 로딩 (repos, module 등) */}
+        {loading && viewLevel !== 'big-picture' && (
           <div style={{
             padding: '60px',
             background: '#fff',
@@ -958,56 +1105,73 @@ function VisualizationContent() {
                 )}
               </div>
 
-              {/* 함수 목록 */}
-              <div>
-                <h3 style={{ margin: '0 0 16px', fontSize: '1rem', color: '#1e293b' }}>
-                  ⚙️ 함수 목록 ({moduleFunctions.length}개)
-                </h3>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {moduleFunctions.length === 0 ? (
-                    <div style={{ padding: '20px', textAlign: 'center', color: '#64748b', background: '#f8fafc', borderRadius: '8px' }}>
-                      함수 정보 없음
-                    </div>
-                  ) : (
-                    moduleFunctions.map((func, idx) => (
-                      <button
-                        key={idx}
-                        onClick={() => handleFunctionSelect(func.name)}
-                        style={{
-                          padding: '16px',
-                          background: func.status === 'error' ? '#fef2f2' : '#fff',
-                          border: `1px solid ${func.status === 'error' ? '#fecaca' : '#e2e8f0'}`,
-                          borderRadius: '8px',
-                          textAlign: 'left',
-                          cursor: 'pointer',
-                          transition: 'all 0.2s',
-                        }}
-                        onMouseEnter={(e) => e.currentTarget.style.borderColor = '#3b82f6'}
-                        onMouseLeave={(e) => e.currentTarget.style.borderColor = func.status === 'error' ? '#fecaca' : '#e2e8f0'}
-                      >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span>
-                            {func.type === 'class' ? '📦' : func.type === 'component' ? '🧩' : '⚙️'}
-                          </span>
-                          <span style={{ fontWeight: 500, color: '#1e293b' }}>
-                            {func.name}()
-                          </span>
-                          {func.status === 'error' && (
-                            <span style={{ fontSize: '12px', color: '#dc2626' }}>🔴</span>
-                          )}
-                        </div>
-                        {func.calls.length > 0 && (
-                          <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>
-                            호출: {func.calls.slice(0, 3).join(', ')}{func.calls.length > 3 ? '...' : ''}
+              {/* 함수 목록 + ErrorTrace */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {/* 함수 목록 */}
+                <div>
+                  <h3 style={{ margin: '0 0 16px', fontSize: '1rem', color: '#1e293b' }}>
+                    ⚙️ 함수 목록 ({moduleFunctions.length}개)
+                  </h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '300px', overflowY: 'auto' }}>
+                    {moduleFunctions.length === 0 ? (
+                      <div style={{ padding: '20px', textAlign: 'center', color: '#64748b', background: '#f8fafc', borderRadius: '8px' }}>
+                        함수 정보 없음
+                      </div>
+                    ) : (
+                      moduleFunctions.map((func, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => handleFunctionSelect(func.name)}
+                          style={{
+                            padding: '16px',
+                            background: func.status === 'error' ? '#fef2f2' : '#fff',
+                            border: `1px solid ${func.status === 'error' ? '#fecaca' : '#e2e8f0'}`,
+                            borderRadius: '8px',
+                            textAlign: 'left',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s',
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.borderColor = '#3b82f6'}
+                          onMouseLeave={(e) => e.currentTarget.style.borderColor = func.status === 'error' ? '#fecaca' : '#e2e8f0'}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span>
+                              {func.type === 'class' ? '📦' : func.type === 'component' ? '🧩' : '⚙️'}
+                            </span>
+                            <span style={{ fontWeight: 500, color: '#1e293b' }}>
+                              {func.name}()
+                            </span>
+                            {func.status === 'error' && (
+                              <span style={{ fontSize: '12px', color: '#dc2626' }}>🔴</span>
+                            )}
                           </div>
-                        )}
-                        <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '4px' }}>
-                          Line {func.line_start}-{func.line_end}
-                        </div>
-                      </button>
-                    ))
-                  )}
+                          {func.calls.length > 0 && (
+                            <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>
+                              호출: {func.calls.slice(0, 3).join(', ')}{func.calls.length > 3 ? '...' : ''}
+                            </div>
+                          )}
+                          <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '4px' }}>
+                            Line {func.line_start}-{func.line_end}
+                          </div>
+                        </button>
+                      ))
+                    )}
+                  </div>
                 </div>
+
+                {/* Phase 2: ErrorTrace 통합 (이슈 #43) */}
+                {analysisResultForErrorTrace && analysisResultForErrorTrace.riskPoints.length > 0 && (
+                  <ErrorTrace
+                    analysisResult={analysisResultForErrorTrace}
+                    onPathClick={(path) => {
+                      // 해당 모듈로 이동
+                      const moduleName = path.split('/').pop()?.replace(/\.(ts|tsx|js|jsx)$/, '')
+                      if (moduleName) {
+                        handleModuleSelect(moduleName)
+                      }
+                    }}
+                  />
+                )}
               </div>
             </div>
           </div>
