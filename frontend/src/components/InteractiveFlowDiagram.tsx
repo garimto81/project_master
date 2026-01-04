@@ -12,7 +12,7 @@
  * - 줌/팬 지원
  */
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 
 interface Layer {
   name: string
@@ -66,6 +66,30 @@ const LAYER_ICONS: Record<string, string> = {
   data: '💾',
 }
 
+// Phase 2: 사용자 여정 설명 (이슈 #41)
+const LAYER_JOURNEY_DESC: Record<string, { action: string; example: string; result: string }> = {
+  ui: {
+    action: '사용자가 버튼을 클릭하거나 폼을 입력합니다',
+    example: '예: "로그인 버튼 클릭", "검색어 입력"',
+    result: '화면에서 받은 입력을 처리 레이어로 전달',
+  },
+  logic: {
+    action: '입력 데이터를 검증하고 변환합니다',
+    example: '예: "비밀번호 유효성 검사", "날짜 형식 변환"',
+    result: '가공된 데이터를 서버로 전송 준비',
+  },
+  server: {
+    action: '외부 서버에 데이터를 요청합니다',
+    example: '예: "API 호출", "로그인 인증 요청"',
+    result: '서버 응답을 받아 데이터 저장',
+  },
+  data: {
+    action: '응답 데이터를 저장하고 관리합니다',
+    example: '예: "사용자 정보 저장", "로그인 상태 업데이트"',
+    result: '저장된 데이터가 화면에 표시됨',
+  },
+}
+
 export default function InteractiveFlowDiagram({
   layers,
   connections,
@@ -81,6 +105,11 @@ export default function InteractiveFlowDiagram({
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
   const [hoveredLayer, setHoveredLayer] = useState<string | null>(null)
   const [expandedLayer, setExpandedLayer] = useState<string | null>(null)
+
+  // Phase 2: 가이드 모드 상태 (이슈 #41)
+  const [guideMode, setGuideMode] = useState(false)
+  const [guideStep, setGuideStep] = useState(0)
+  const [isAutoPlaying, setIsAutoPlaying] = useState(false)
 
   // 레이어에 관련된 위험 지점 수
   const getRiskCount = (layerName: string) => {
@@ -129,6 +158,39 @@ export default function InteractiveFlowDiagram({
     setPan({ x: 0, y: 0 })
   }
 
+  // Phase 2: 가이드 자동 재생 (이슈 #41)
+  useEffect(() => {
+    if (!isAutoPlaying || !guideMode) return
+
+    const timer = setInterval(() => {
+      setGuideStep(prev => {
+        if (prev >= layers.length) {
+          setIsAutoPlaying(false)
+          return 0
+        }
+        return prev + 1
+      })
+    }, 3000)
+
+    return () => clearInterval(timer)
+  }, [isAutoPlaying, guideMode, layers.length])
+
+  // 가이드 모드 토글
+  const toggleGuideMode = () => {
+    setGuideMode(!guideMode)
+    setGuideStep(0)
+    setIsAutoPlaying(false)
+  }
+
+  // 가이드 단계 이동
+  const nextGuideStep = () => {
+    setGuideStep(prev => Math.min(prev + 1, layers.length))
+  }
+
+  const prevGuideStep = () => {
+    setGuideStep(prev => Math.max(prev - 1, 0))
+  }
+
   // 레이어 위치 계산 (향후 사용 예정)
   // const getLayerPosition = (index: number, total: number) => {
   //   const baseY = 80
@@ -166,6 +228,23 @@ export default function InteractiveFlowDiagram({
           zIndex: 10,
         }}
       >
+        {/* Phase 2: 가이드 모드 버튼 (이슈 #41) */}
+        <button
+          onClick={toggleGuideMode}
+          style={{
+            padding: '0 12px',
+            height: '32px',
+            borderRadius: '6px',
+            border: guideMode ? '2px solid #3b82f6' : '1px solid #e2e8f0',
+            background: guideMode ? '#dbeafe' : '#fff',
+            cursor: 'pointer',
+            fontSize: '12px',
+            color: guideMode ? '#1e40af' : '#64748b',
+            fontWeight: guideMode ? 600 : 400,
+          }}
+        >
+          {guideMode ? '🎯 가이드 ON' : '🎯 가이드'}
+        </button>
         <button
           onClick={() => setZoom(z => Math.min(z + 0.2, 2))}
           style={{
@@ -209,6 +288,179 @@ export default function InteractiveFlowDiagram({
           리셋
         </button>
       </div>
+
+      {/* Phase 2: 가이드 패널 (이슈 #41) */}
+      {guideMode && (
+        <div
+          style={{
+            position: 'absolute',
+            top: '56px',
+            right: '12px',
+            width: '320px',
+            background: '#fff',
+            borderRadius: '12px',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+            zIndex: 20,
+            overflow: 'hidden',
+          }}
+        >
+          {/* 가이드 헤더 */}
+          <div style={{
+            padding: '16px',
+            background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)',
+            color: '#fff',
+          }}>
+            <h3 style={{ margin: 0, fontSize: '14px', fontWeight: 600 }}>
+              🗺️ 사용자 여정 가이드
+            </h3>
+            <p style={{ margin: '4px 0 0', fontSize: '12px', opacity: 0.9 }}>
+              데이터가 어떻게 흐르는지 단계별로 알아보세요
+            </p>
+          </div>
+
+          {/* 진행 바 */}
+          <div style={{ padding: '12px 16px', borderBottom: '1px solid #e2e8f0' }}>
+            <div style={{
+              display: 'flex',
+              gap: '4px',
+              marginBottom: '8px',
+            }}>
+              {[0, ...layers.map((_, i) => i + 1)].map(step => (
+                <div
+                  key={step}
+                  onClick={() => setGuideStep(step)}
+                  style={{
+                    flex: 1,
+                    height: '4px',
+                    borderRadius: '2px',
+                    background: step <= guideStep ? '#3b82f6' : '#e2e8f0',
+                    cursor: 'pointer',
+                    transition: 'background 0.3s',
+                  }}
+                />
+              ))}
+            </div>
+            <div style={{ fontSize: '11px', color: '#64748b', textAlign: 'center' }}>
+              단계 {guideStep} / {layers.length}
+            </div>
+          </div>
+
+          {/* 가이드 내용 */}
+          <div style={{ padding: '16px', minHeight: '120px' }}>
+            {guideStep === 0 ? (
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: '32px', marginBottom: '12px' }}>👤</div>
+                <h4 style={{ margin: '0 0 8px', color: '#1e293b' }}>사용자 시작</h4>
+                <p style={{ margin: 0, fontSize: '13px', color: '#64748b', lineHeight: 1.6 }}>
+                  사용자가 앱을 열고 버튼을 클릭하거나 정보를 입력합니다.
+                  이 입력은 화면(UI) 레이어에서 처리됩니다.
+                </p>
+              </div>
+            ) : (
+              (() => {
+                const layer = layers[guideStep - 1]
+                const journey = LAYER_JOURNEY_DESC[layer?.name] || LAYER_JOURNEY_DESC.logic
+                const colors = LAYER_COLORS[layer?.name] || LAYER_COLORS.logic
+                const icon = LAYER_ICONS[layer?.name] || '📦'
+
+                return (
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
+                      <div style={{
+                        width: '40px',
+                        height: '40px',
+                        borderRadius: '10px',
+                        background: colors.bg,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '20px',
+                      }}>
+                        {icon}
+                      </div>
+                      <div>
+                        <h4 style={{ margin: 0, color: colors.text }}>{layer?.displayName}</h4>
+                        <p style={{ margin: 0, fontSize: '11px', color: '#64748b' }}>
+                          {layer?.modules.length}개 모듈
+                        </p>
+                      </div>
+                    </div>
+
+                    <div style={{ fontSize: '13px', lineHeight: 1.6 }}>
+                      <p style={{ margin: '0 0 8px', color: '#1e293b' }}>
+                        <strong>무엇을 하나요?</strong><br />
+                        {journey.action}
+                      </p>
+                      <p style={{ margin: '0 0 8px', color: '#64748b', fontSize: '12px' }}>
+                        {journey.example}
+                      </p>
+                      <p style={{ margin: 0, color: '#3b82f6', fontWeight: 500 }}>
+                        → {journey.result}
+                      </p>
+                    </div>
+                  </div>
+                )
+              })()
+            )}
+          </div>
+
+          {/* 가이드 컨트롤 */}
+          <div style={{
+            padding: '12px 16px',
+            borderTop: '1px solid #e2e8f0',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+          }}>
+            <button
+              onClick={prevGuideStep}
+              disabled={guideStep === 0}
+              style={{
+                padding: '8px 16px',
+                borderRadius: '6px',
+                border: 'none',
+                background: guideStep === 0 ? '#f1f5f9' : '#e2e8f0',
+                color: guideStep === 0 ? '#94a3b8' : '#64748b',
+                cursor: guideStep === 0 ? 'not-allowed' : 'pointer',
+                fontSize: '13px',
+              }}
+            >
+              ← 이전
+            </button>
+
+            <button
+              onClick={() => setIsAutoPlaying(!isAutoPlaying)}
+              style={{
+                padding: '8px 16px',
+                borderRadius: '6px',
+                border: 'none',
+                background: isAutoPlaying ? '#dbeafe' : '#3b82f6',
+                color: isAutoPlaying ? '#1e40af' : '#fff',
+                cursor: 'pointer',
+                fontSize: '13px',
+              }}
+            >
+              {isAutoPlaying ? '⏸ 일시정지' : '▶ 자동재생'}
+            </button>
+
+            <button
+              onClick={nextGuideStep}
+              disabled={guideStep >= layers.length}
+              style={{
+                padding: '8px 16px',
+                borderRadius: '6px',
+                border: 'none',
+                background: guideStep >= layers.length ? '#f1f5f9' : '#3b82f6',
+                color: guideStep >= layers.length ? '#94a3b8' : '#fff',
+                cursor: guideStep >= layers.length ? 'not-allowed' : 'pointer',
+                fontSize: '13px',
+              }}
+            >
+              다음 →
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* 줌 레벨 표시 */}
       <div
@@ -276,6 +528,8 @@ export default function InteractiveFlowDiagram({
             const issueCount = getIssueCount(layer.name)
             const isHovered = hoveredLayer === layer.name
             const isExpanded = expandedLayer === layer.name
+            // Phase 2: 가이드 모드에서 현재 단계 하이라이트 (이슈 #41)
+            const isGuideHighlighted = guideMode && guideStep === index + 1
 
             return (
               <div key={layer.name}>
@@ -294,13 +548,17 @@ export default function InteractiveFlowDiagram({
                   onMouseLeave={() => setHoveredLayer(null)}
                   style={{
                     padding: '16px 20px',
-                    background: isHovered ? colors.bg : colors.light,
-                    border: `2px solid ${isHovered ? colors.border : '#e2e8f0'}`,
+                    background: isGuideHighlighted ? colors.bg : (isHovered ? colors.bg : colors.light),
+                    border: `2px solid ${isGuideHighlighted ? colors.border : (isHovered ? colors.border : '#e2e8f0')}`,
                     borderRadius: '12px',
                     cursor: 'pointer',
-                    transition: 'all 0.2s ease',
-                    transform: isHovered ? 'scale(1.02)' : 'scale(1)',
-                    boxShadow: isHovered ? `0 4px 12px ${colors.border}40` : 'none',
+                    transition: 'all 0.3s ease',
+                    transform: isGuideHighlighted ? 'scale(1.03)' : (isHovered ? 'scale(1.02)' : 'scale(1)'),
+                    boxShadow: isGuideHighlighted
+                      ? `0 8px 24px ${colors.border}60, 0 0 0 4px ${colors.border}20`
+                      : (isHovered ? `0 4px 12px ${colors.border}40` : 'none'),
+                    // 가이드 모드에서 비활성 레이어 흐리게
+                    opacity: guideMode && !isGuideHighlighted && guideStep > 0 ? 0.5 : 1,
                   }}
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
