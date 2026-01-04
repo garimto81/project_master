@@ -75,6 +75,27 @@ test.describe('프로젝트 관리', () => {
   });
 });
 
+test.describe('프로젝트 에러 처리', () => {
+  test('BUG-50-01: repo 파라미터 없이 프로젝트 페이지 접근', async ({ page }) => {
+    // repo 파라미터 없이 접근
+    await page.goto('/project');
+
+    // 에러 메시지가 표시되어야 함
+    await expect(page.getByText('⚠️ 프로젝트를 찾을 수 없습니다')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText('URL에서 `?repo=owner/repo` 파라미터를 확인해주세요.')).toBeVisible();
+
+    // 홈으로 돌아가기 링크 확인
+    await expect(page.getByRole('link', { name: '홈으로 돌아가기' })).toBeVisible();
+  });
+
+  test('BUG-50-02: 빈 repo 파라미터로 접근', async ({ page }) => {
+    await page.goto('/project?repo=');
+
+    // 에러 메시지가 표시되어야 함
+    await expect(page.getByText('⚠️ 프로젝트를 찾을 수 없습니다')).toBeVisible({ timeout: 5000 });
+  });
+});
+
 test.describe('프로젝트 다이어그램', () => {
   test('PROJ-DIAG-01: 다이어그램 섹션 표시', async ({ page }) => {
     // 테스트 모드로 프로젝트 페이지 접근

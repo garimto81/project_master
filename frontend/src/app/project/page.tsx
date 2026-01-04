@@ -529,6 +529,40 @@ function ProjectContent() {
     setUsedModel(selectedModel)
   }
 
+  // repoParam이 없거나 빈 문자열이면 에러 메시지 표시
+  if (!repoParam || repoParam.trim() === '') {
+    return (
+      <main className="project-page" data-testid="project-page">
+        <header data-testid="project-header">
+          <h1>프로젝트</h1>
+          <Link href="/" data-testid="back-btn">← 돌아가기</Link>
+        </header>
+        <div style={{ padding: '40px', textAlign: 'center' }}>
+          <p style={{ fontSize: '18px', color: '#666', marginBottom: '20px' }}>
+            ⚠️ 프로젝트를 찾을 수 없습니다
+          </p>
+          <p style={{ fontSize: '14px', color: '#999' }}>
+            URL에서 `?repo=owner/repo` 파라미터를 확인해주세요.
+          </p>
+          <Link
+            href="/"
+            style={{
+              display: 'inline-block',
+              marginTop: '20px',
+              padding: '10px 20px',
+              background: '#3b82f6',
+              color: 'white',
+              textDecoration: 'none',
+              borderRadius: '6px'
+            }}
+          >
+            홈으로 돌아가기
+          </Link>
+        </div>
+      </main>
+    )
+  }
+
   return (
     <main className="project-page" data-testid="project-page">
       <header data-testid="project-header">
@@ -754,13 +788,44 @@ function ProjectContent() {
 
           {/* 에러 상태 (로딩 완료 후 에러) */}
           {!diagramLoading && diagramError && (
-            <div data-testid="diagram-error">
+            <div data-testid="diagram-error" style={{
+              padding: '30px',
+              textAlign: 'center',
+              background: '#fef2f2',
+              border: '2px solid #dc2626',
+              borderRadius: '12px'
+            }}>
               <AnalysisProgressBar
                 stage="error"
                 percent={0}
                 message="분석에 실패했습니다"
                 error={diagramError}
               />
+              <div style={{ marginTop: '20px' }}>
+                <p style={{ fontSize: '14px', color: '#666', marginBottom: '10px' }}>
+                  다음을 확인해주세요:
+                </p>
+                <ul style={{ textAlign: 'left', maxWidth: '400px', margin: '0 auto', fontSize: '13px', color: '#999' }}>
+                  <li>GitHub 인증이 유효한지 확인</li>
+                  <li>레포지토리가 존재하는지 확인</li>
+                  <li>브라우저 콘솔에서 에러 메시지 확인</li>
+                </ul>
+                <button
+                  onClick={() => window.location.reload()}
+                  style={{
+                    marginTop: '20px',
+                    padding: '10px 20px',
+                    background: '#3b82f6',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontSize: '14px'
+                  }}
+                >
+                  🔄 다시 시도
+                </button>
+              </div>
             </div>
           )}
 
