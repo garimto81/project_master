@@ -13,6 +13,7 @@ interface AnalysisProgressBarProps {
   stage: AnalysisStage
   percent: number
   message?: string
+  currentFile?: string  // 현재 처리 중인 파일
   filesProcessed?: number
   totalFiles?: number
   error?: string
@@ -33,6 +34,7 @@ export function AnalysisProgressBar({
   stage,
   percent,
   message,
+  currentFile,
   filesProcessed,
   totalFiles,
   error,
@@ -95,9 +97,26 @@ export function AnalysisProgressBar({
         </div>
       </div>
 
+      {/* 현재 처리 중인 파일 */}
+      {currentFile && stage === 'analyzing' && (
+        <div
+          style={{
+            fontSize: '12px',
+            color: '#64748b',
+            marginTop: '8px',
+            padding: '8px 12px',
+            background: '#f8fafc',
+            borderRadius: '6px',
+            fontFamily: 'monospace',
+          }}
+        >
+          📄 {currentFile}
+        </div>
+      )}
+
       {/* 파일 진행 상황 */}
       {filesProcessed !== undefined && totalFiles !== undefined && totalFiles > 0 && (
-        <div style={{ fontSize: '12px', color: '#94a3b8', marginBottom: '8px' }}>
+        <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '8px' }}>
           📁 {filesProcessed} / {totalFiles} 파일 처리됨
         </div>
       )}
