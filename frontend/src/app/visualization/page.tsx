@@ -164,9 +164,12 @@ function VisualizationContent() {
   } | null>(null)
   const [showCallGraph, setShowCallGraph] = useState(false)
 
-  // Phase 1: 분석 진행률 상태 (이슈 #42)
+  // Phase 1: 분석 진행률 상태 (이슈 #42, #48)
   const [analysisStage, setAnalysisStage] = useState<AnalysisStage>('fetching')
   const [analysisPercent, setAnalysisPercent] = useState(0)
+  const [currentFile, setCurrentFile] = useState<string | undefined>(undefined)
+  const [filesProcessed, setFilesProcessed] = useState<number>(0)
+  const [totalFiles, setTotalFiles] = useState<number>(0)
   const [abortController, setAbortController] = useState<AbortController | null>(null)
 
   // 브레드크럼 생성
@@ -212,6 +215,9 @@ function VisualizationContent() {
     setAnalyzeData(null)
     setAnalysisStage('fetching')
     setAnalysisPercent(10)
+    setCurrentFile(undefined)
+    setFilesProcessed(0)
+    setTotalFiles(0)
 
     // 120초 타임아웃 설정
     const timeoutId = setTimeout(() => {
@@ -244,6 +250,27 @@ function VisualizationContent() {
       setAnalysisStage('analyzing')
       setAnalysisPercent(40)
 
+      // 분석 중 진행 상황 시뮬레이션 (Issue #48)
+      const simulationInterval = setInterval(() => {
+        setAnalysisPercent(prev => {
+          if (prev >= 85) {
+            clearInterval(simulationInterval)
+            return 85
+          }
+          return prev + 2
+        })
+
+        // 샘플 파일명 표시 (실제 분석 파일 대신 시뮬레이션)
+        const sampleFiles = [
+          'src/app/page.tsx',
+          'src/components/MermaidDiagram.tsx',
+          'src/lib/auth.ts',
+          'src/app/api/logic-flow/analyze/route.ts',
+          'src/components/visualization/AnalysisProgressBar.tsx',
+        ]
+        setCurrentFile(sampleFiles[Math.floor(Math.random() * sampleFiles.length)])
+      }, 1500)  // 1.5초마다 업데이트
+
       const res = await fetch('/api/logic-flow/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -256,14 +283,21 @@ function VisualizationContent() {
       })
 
       setAnalysisPercent(70)
+      setTotalFiles(50)  // 예상 파일 수
+      setFilesProcessed(35)  // 진행 중
 
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
+        clearInterval(simulationInterval)  // 인터벌 정리
         throw new Error(data.error || `코드 분석 실패 (HTTP ${res.status})`)
       }
 
+      clearInterval(simulationInterval)  // 인터벌 정리
       setAnalysisStage('building')
-      setAnalysisPercent(85)
+      setAnalysisPercent(90)
+      setCurrentFile(undefined)
+      setFilesProcessed(50)
+      setTotalFiles(50)
 
       const data = await res.json()
 
@@ -274,6 +308,7 @@ function VisualizationContent() {
 
       setAnalysisStage('complete')
       setAnalysisPercent(100)
+      setCurrentFile(undefined)
       setAnalyzeData(data)  // 상세 결과로 업데이트
     } catch (err) {
       const error = err as Error
@@ -698,12 +733,15 @@ function VisualizationContent() {
           </div>
         )}
 
-        {/* 로딩 - Phase 1: AnalysisProgressBar 사용 (이슈 #42, #44) */}
+        {/* 로딩 - Phase 1: AnalysisProgressBar 사용 (이슈 #42, #44, #48) */}
         {(loading || isCacheLoading || isAnalyzing) && viewLevel === 'big-picture' && !analyzeData && (
           <AnalysisProgressBar
             stage={isAnalyzing ? 'analyzing' : isCacheLoading ? 'fetching' : analysisStage}
             percent={isAnalyzing ? cacheProgress : isCacheLoading ? 10 : analysisPercent}
             message={selectedRepo ? (isCacheReady ? '캐시에서 로드 완료' : isAnalyzing ? `${selectedRepo} 분석 중...` : `${selectedRepo} 캐시 확인 중...`) : undefined}
+            currentFile={currentFile}
+            filesProcessed={filesProcessed}
+            totalFiles={totalFiles}
             error={error || undefined}
             onCancel={() => {
               if (abortController) {

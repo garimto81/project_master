@@ -10,6 +10,7 @@ venv/
 dist/
 build/
 *.egg-info/
+*.tsbuildinfo
 
 # IDE
 .idea/
@@ -20,6 +21,8 @@ build/
 test-results/
 playwright-report/
 .pytest_cache/
+.coverage
+*.coverage
 
 # Logs
 *.log
@@ -29,6 +32,8 @@ npm-debug.log*
 .env
 .env.local
 .env*.local
+.env.vercel
+auth.json
 
 # OS
 .DS_Store
@@ -38,3 +43,15 @@ Thumbs.db
 *.tmp
 *.temp
 nul
+
+# Test coverage
+.coverage
+coverage/
+*.coverage
+
+# Vercel
+.vercel
+.env.vercel
+
+# Auth credentials
+auth.json

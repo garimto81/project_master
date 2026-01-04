@@ -354,21 +354,9 @@ function detectUnusedFiles(
   })
 }
 
-export async function POST(request: NextRequest) {
+async function analyzeCodebase(request: NextRequest, params: { repo?: string; path?: string; depth?: string; include_risk?: boolean; skipCache?: boolean }) {
   try {
-    // 안전한 JSON 파싱 (빈 body 처리)
-    let body: { repo?: string; path?: string; depth?: string; include_risk?: boolean; skipCache?: boolean }
-    try {
-      const text = await request.text()
-      if (!text || text.trim() === '') {
-        return NextResponse.json({ error: 'Request body is required' }, { status: 400 })
-      }
-      body = JSON.parse(text)
-    } catch {
-      return NextResponse.json({ error: 'Invalid JSON in request body' }, { status: 400 })
-    }
-
-    const { repo, path = 'src/', depth = 'medium', include_risk = true, skipCache = false } = body
+    const { repo, path = 'src/', depth = 'medium', include_risk = true, skipCache = false } = params
 
     if (!repo) {
       return NextResponse.json({ error: 'repo parameter required' }, { status: 400 })
@@ -449,14 +437,96 @@ export async function POST(request: NextRequest) {
       data: [],
     }
 
-    // 모든 코드 파일 필터링
-    const allCodeFiles = (treeData.tree || []).filter((item: GitHubTreeItem) =>
+    // 모든 코드 파일 필터링 (자동 경로 탐지 지원)
+    let allCodeFiles = (treeData.tree || []).filter((item: GitHubTreeItem) =>
       item.type === 'blob' &&
       item.path.startsWith(path.replace(/^\//, '')) &&
       (item.path.endsWith('.ts') || item.path.endsWith('.tsx') ||
        item.path.endsWith('.js') || item.path.endsWith('.jsx') ||
        item.path.endsWith('.py'))
     )
+
+    // 자동 경로 탐지: 기본 경로에 파일이 없으면 일반적인 경로 시도
+    let detectedPath = path
+    if (allCodeFiles.length === 0 && path === 'src/') {
+      // 제외할 디렉토리 패턴 (node_modules, 빌드 결과물, Git, 테스트)
+      const excludePatterns = [
+        'node_modules/',
+        'dist/',
+        'build/',
+        '.next/',
+        'out/',
+        '.git/',
+        'coverage/',
+        '__tests__/',
+        'test/',
+        'tests/',
+        '.cache/',
+        'public/',
+        'static/',
+      ]
+
+      // 일반적인 소스 코드 경로 (우선순위 순)
+      const commonPaths = [
+        'web/src/',      // Monorepo: web app
+        'frontend/src/', // Frontend/Backend 분리
+        'app/src/',      // Mobile app 구조
+        'client/src/',   // Client/Server 분리
+        'server/src/',   // Server 코드
+        'backend/src/',  // Backend 코드
+        'packages/',     // Yarn/pnpm workspace
+        'apps/',         // Nx/Turborepo
+        'src/',          // 표준
+        'lib/',          // 라이브러리
+      ]
+
+      const shouldExclude = (path: string): boolean => {
+        return excludePatterns.some(pattern => path.includes(pattern))
+      }
+
+      for (const tryPath of commonPaths) {
+        const files = (treeData.tree || []).filter((item: GitHubTreeItem) =>
+          item.type === 'blob' &&
+          item.path.startsWith(tryPath) &&
+          !shouldExclude(item.path) &&
+          (item.path.endsWith('.ts') || item.path.endsWith('.tsx') ||
+           item.path.endsWith('.js') || item.path.endsWith('.jsx') ||
+           item.path.endsWith('.py'))
+        )
+
+        if (files.length > 0) {
+          allCodeFiles = files
+          detectedPath = tryPath
+          console.log(`[Auto Path Detection] Found ${files.length} files in "${tryPath}"`)
+          break
+        }
+      }
+    }
+
+    // 빈 결과 검증
+    if (allCodeFiles.length === 0) {
+      return NextResponse.json({
+        error: '분석 가능한 코드 파일을 찾을 수 없습니다',
+        details: {
+          repo,
+          searchedPath: path,
+          suggestion: '다음을 확인해주세요:\n' +
+            '1. 레포지토리에 TypeScript, JavaScript, Python 파일이 있는지\n' +
+            '2. 파일이 일반적인 경로에 있는지 (아래 목록 참조)\n' +
+            '3. 특이한 경로인 경우 URL에 ?path=your/custom/path 파라미터 추가',
+          commonPaths: [
+            'src/', 'web/src/', 'frontend/src/', 'backend/src/',
+            'client/src/', 'server/src/', 'app/src/',
+            'packages/', 'apps/', 'lib/'
+          ],
+          excludedPaths: [
+            'node_modules/', 'dist/', 'build/', '.next/',
+            '.git/', 'coverage/', 'test/', 'public/'
+          ],
+          example: `${repo}?path=your/custom/path`
+        }
+      }, { status: 404 })
+    }
 
     // 샘플링 전략: 레포 크기에 따라 동적으로 샘플링
     const MAX_FILES = depth === 'full' ? 100 : depth === 'medium' ? 50 : 20
@@ -808,6 +878,8 @@ export async function POST(request: NextRequest) {
       mermaid_code: mermaidLines.join('\n'),
       stats,
       summary: `${repo}: ${layers.length}개 레이어, ${allImports.length}개 의존성, ${circularDependencies.length}개 순환, ${riskPoints.length}개 위험 지점`,
+      // 자동 경로 탐지 정보
+      ...(detectedPath !== path && { detectedPath, requestedPath: path }),
     }
 
     // 결과 캐싱 (재방문 즉시 로드)
@@ -815,6 +887,42 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(response)
 
+  } catch (error) {
+    console.error('Logic flow analyze error:', error)
+    return NextResponse.json({ error: '코드 분석을 수행할 수 없습니다' }, { status: 500 })
+  }
+}
+
+// GET 핸들러 (SWR 캐싱 지원)
+export async function GET(request: NextRequest) {
+  const searchParams = request.nextUrl.searchParams
+  const params = {
+    repo: searchParams.get('repo') ?? undefined,
+    path: searchParams.get('path') ?? undefined,
+    depth: searchParams.get('depth') ?? undefined,
+    include_risk: searchParams.get('include_risk') === 'true',
+    skipCache: searchParams.get('skipCache') === 'true',
+  }
+
+  return analyzeCodebase(request, params)
+}
+
+// POST 핸들러 (기존 호환성 유지)
+export async function POST(request: NextRequest) {
+  try {
+    // 안전한 JSON 파싱 (빈 body 처리)
+    let body: { repo?: string; path?: string; depth?: string; include_risk?: boolean; skipCache?: boolean }
+    try {
+      const text = await request.text()
+      if (!text || text.trim() === '') {
+        return NextResponse.json({ error: 'Request body is required' }, { status: 400 })
+      }
+      body = JSON.parse(text)
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON in request body' }, { status: 400 })
+    }
+
+    return analyzeCodebase(request, body)
   } catch (error) {
     console.error('Logic flow analyze error:', error)
     return NextResponse.json({ error: '코드 분석을 수행할 수 없습니다' }, { status: 500 })
