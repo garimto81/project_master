@@ -354,21 +354,9 @@ function detectUnusedFiles(
   })
 }
 
-export async function POST(request: NextRequest) {
+async function analyzeCodebase(request: NextRequest, params: { repo?: string; path?: string; depth?: string; include_risk?: boolean; skipCache?: boolean }) {
   try {
-    // 안전한 JSON 파싱 (빈 body 처리)
-    let body: { repo?: string; path?: string; depth?: string; include_risk?: boolean; skipCache?: boolean }
-    try {
-      const text = await request.text()
-      if (!text || text.trim() === '') {
-        return NextResponse.json({ error: 'Request body is required' }, { status: 400 })
-      }
-      body = JSON.parse(text)
-    } catch {
-      return NextResponse.json({ error: 'Invalid JSON in request body' }, { status: 400 })
-    }
-
-    const { repo, path = 'src/', depth = 'medium', include_risk = true, skipCache = false } = body
+    const { repo, path = 'src/', depth = 'medium', include_risk = true, skipCache = false } = params
 
     if (!repo) {
       return NextResponse.json({ error: 'repo parameter required' }, { status: 400 })
@@ -815,6 +803,42 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(response)
 
+  } catch (error) {
+    console.error('Logic flow analyze error:', error)
+    return NextResponse.json({ error: '코드 분석을 수행할 수 없습니다' }, { status: 500 })
+  }
+}
+
+// GET 핸들러 (SWR 캐싱 지원)
+export async function GET(request: NextRequest) {
+  const searchParams = request.nextUrl.searchParams
+  const params = {
+    repo: searchParams.get('repo') ?? undefined,
+    path: searchParams.get('path') ?? undefined,
+    depth: searchParams.get('depth') ?? undefined,
+    include_risk: searchParams.get('include_risk') === 'true',
+    skipCache: searchParams.get('skipCache') === 'true',
+  }
+
+  return analyzeCodebase(request, params)
+}
+
+// POST 핸들러 (기존 호환성 유지)
+export async function POST(request: NextRequest) {
+  try {
+    // 안전한 JSON 파싱 (빈 body 처리)
+    let body: { repo?: string; path?: string; depth?: string; include_risk?: boolean; skipCache?: boolean }
+    try {
+      const text = await request.text()
+      if (!text || text.trim() === '') {
+        return NextResponse.json({ error: 'Request body is required' }, { status: 400 })
+      }
+      body = JSON.parse(text)
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON in request body' }, { status: 400 })
+    }
+
+    return analyzeCodebase(request, body)
   } catch (error) {
     console.error('Logic flow analyze error:', error)
     return NextResponse.json({ error: '코드 분석을 수행할 수 없습니다' }, { status: 500 })
