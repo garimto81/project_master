@@ -16,6 +16,7 @@ import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import { signInWithGitHub } from '@/lib/supabase'
+import { useProjectAnalysis } from '@/lib/hooks/useProjectAnalysis'
 import type { AnalysisResult, RiskPoint as TypedRiskPoint, Layer as TypedLayer } from '@/lib/types'
 
 // 클라이언트 컴포넌트 동적 로드
@@ -141,6 +142,17 @@ function VisualizationContent() {
   const [moduleMermaid, setModuleMermaid] = useState<string>('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // 이슈 #44: 캐시 기반 분석 데이터 조회
+  const {
+    analysis: cachedAnalysis,
+    isLoading: isCacheLoading,
+    isAnalyzing,
+    isReady: isCacheReady,
+    progress: cacheProgress,
+    error: cacheError,
+    refresh: _refreshAnalysis, // 향후 새로고침 버튼에 연결 예정
+  } = useProjectAnalysis(selectedRepo || '')
 
   // Phase 2: Call Graph 상태 (이슈 #43)
   const [callGraphData, setCallGraphData] = useState<{
@@ -350,12 +362,76 @@ function VisualizationContent() {
     }
   }, [viewLevel, loadRepos])
 
-  // Level 1-A: 큰 그림 로드
+  // 이슈 #44: 캐시된 분석 결과를 analyzeData로 변환
   useEffect(() => {
-    if (viewLevel === 'big-picture' && selectedRepo) {
+    if (isCacheReady && cachedAnalysis && viewLevel === 'big-picture') {
+      // 캐시 히트 - 즉시 데이터 표시 (로딩 없음)
+      // AstAnalysisResult 타입: { files: FileAnalysis[], stats: AnalysisStats }
+      const astResult = cachedAnalysis as unknown as {
+        files?: Array<{ path: string; layer: string; functions: Array<{ name: string }> }>
+        stats?: { totalFiles: number; totalFunctions: number }
+      }
+
+      if (astResult.files && astResult.files.length > 0) {
+        // 레이어별로 파일 그룹화
+        const layerGroups = new Map<string, string[]>()
+        for (const file of astResult.files) {
+          const layer = file.layer || 'unknown'
+          if (!layerGroups.has(layer)) {
+            layerGroups.set(layer, [])
+          }
+          // 파일명에서 모듈명 추출
+          const moduleName = file.path.split('/').pop()?.replace(/\.(ts|tsx|js|jsx)$/, '') || file.path
+          layerGroups.get(layer)!.push(moduleName)
+        }
+
+        const layers: Layer[] = Array.from(layerGroups.entries()).map(([name, modules]) => ({
+          name,
+          displayName: name.charAt(0).toUpperCase() + name.slice(1),
+          modules,
+          description: `${name} layer`,
+        }))
+
+        setAnalyzeData({
+          repo: selectedRepo || '',
+          data_flow: {
+            entry_points: [],
+            layers,
+            connections: [],
+          },
+          circular_dependencies: [],
+          risk_points: [],
+          issues: [],
+          mermaid_code: '',
+          summary: 'Cached analysis',
+          stats: {
+            totalFiles: astResult.stats?.totalFiles || astResult.files.length,
+            analyzedFiles: astResult.files.length,
+            totalDependencies: 0,
+            circularCount: 0,
+            unusedCount: 0,
+          },
+        })
+        setLoading(false)
+        setError(null)
+      }
+    }
+  }, [isCacheReady, cachedAnalysis, viewLevel, selectedRepo])
+
+  // 이슈 #44: 캐시 에러 처리
+  useEffect(() => {
+    if (cacheError && viewLevel === 'big-picture') {
+      setError(cacheError)
+    }
+  }, [cacheError, viewLevel])
+
+  // Level 1-A: 큰 그림 로드 (캐시 미스 시에만)
+  useEffect(() => {
+    if (viewLevel === 'big-picture' && selectedRepo && !isCacheReady && !isCacheLoading && !isAnalyzing) {
+      // 캐시 미스 - 기존 API 분석 실행
       loadAnalyze()
     }
-  }, [viewLevel, selectedRepo, loadAnalyze])
+  }, [viewLevel, selectedRepo, isCacheReady, isCacheLoading, isAnalyzing, loadAnalyze])
 
   // Level 2: 모듈 상세 로드
   async function loadModuleDetail(moduleName: string) {
@@ -380,7 +456,7 @@ function VisualizationContent() {
     }
   }
 
-  // 레포 선택
+  // 레포 선택 (이슈 #44: 캐시 적용)
   function handleRepoSelect(repo: Repository) {
     setSelectedRepo(repo.full_name)
     setSelectedLayer(null)
@@ -388,7 +464,8 @@ function VisualizationContent() {
     setSelectedFunction(null)
     setAnalyzeData(null)  // 이전 데이터 초기화
     setError(null)        // 이전 에러 초기화
-    setLoading(true)      // 즉시 로딩 상태로 전환
+    // 이슈 #44: 캐시 조회 중에만 로딩 표시 (캐시 히트 시 즉시 표시됨)
+    setLoading(isCacheLoading)
     setViewLevel('big-picture')
   }
 
@@ -656,12 +733,12 @@ function VisualizationContent() {
           </div>
         )}
 
-        {/* 로딩 - Phase 1: AnalysisProgressBar 사용 (이슈 #42) */}
-        {loading && viewLevel === 'big-picture' && (
+        {/* 로딩 - Phase 1: AnalysisProgressBar 사용 (이슈 #42, #44, #48) */}
+        {(loading || isCacheLoading || isAnalyzing) && viewLevel === 'big-picture' && !analyzeData && (
           <AnalysisProgressBar
-            stage={analysisStage}
-            percent={analysisPercent}
-            message={selectedRepo ? `${selectedRepo} 분석 중...` : undefined}
+            stage={isAnalyzing ? 'analyzing' : isCacheLoading ? 'fetching' : analysisStage}
+            percent={isAnalyzing ? cacheProgress : isCacheLoading ? 10 : analysisPercent}
+            message={selectedRepo ? (isCacheReady ? '캐시에서 로드 완료' : isAnalyzing ? `${selectedRepo} 분석 중...` : `${selectedRepo} 캐시 확인 중...`) : undefined}
             currentFile={currentFile}
             filesProcessed={filesProcessed}
             totalFiles={totalFiles}
