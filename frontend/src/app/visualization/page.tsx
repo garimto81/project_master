@@ -142,6 +142,16 @@ function VisualizationContent() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // Phase 2: Call Graph 상태 (이슈 #43)
+  const [callGraphData, setCallGraphData] = useState<{
+    nodes: Array<{ id: string; name: string; type: string; file: string; calledByCount: number }>
+    edges: Array<{ fromId: string; toId: string; isAsync: boolean }>
+    apiCalls: Array<{ method: string; path: string; calledFrom: string }>
+    mermaidCode: string
+    stats: { totalFunctions: number; totalCalls: number; totalApiCalls: number }
+  } | null>(null)
+  const [showCallGraph, setShowCallGraph] = useState(false)
+
   // Phase 1: 분석 진행률 상태 (이슈 #42)
   const [analysisStage, setAnalysisStage] = useState<AnalysisStage>('fetching')
   const [analysisPercent, setAnalysisPercent] = useState(0)
@@ -271,6 +281,32 @@ function VisualizationContent() {
       setAbortController(null)
     }
   }, [selectedRepo, abortController])
+
+  // Phase 2: Call Graph 로드 함수 (이슈 #43)
+  const loadCallGraph = useCallback(async () => {
+    if (!selectedRepo) return
+
+    try {
+      const res = await fetch('/api/logic-flow/graph', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ repo: selectedRepo }),
+      })
+
+      if (res.ok) {
+        const data = await res.json()
+        setCallGraphData({
+          nodes: data.nodes || [],
+          edges: data.edges || [],
+          apiCalls: data.apiCalls || [],
+          mermaidCode: data.mermaidCode || '',
+          stats: data.stats || { totalFunctions: 0, totalCalls: 0, totalApiCalls: 0 },
+        })
+      }
+    } catch (err) {
+      console.warn('Call Graph load failed:', err)
+    }
+  }, [selectedRepo])
 
   // Level 0: 레포 목록 로드
   useEffect(() => {
@@ -868,6 +904,154 @@ function VisualizationContent() {
                     )}
                   </div>
                 </details>
+
+                {/* Phase 2: Call Graph 토글 (이슈 #43) */}
+                <div style={{
+                  padding: '20px',
+                  background: '#fff',
+                  borderRadius: '12px',
+                  border: '1px solid #e2e8f0',
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                    <h3 style={{ margin: 0, fontSize: '1rem', color: '#1e293b' }}>
+                      🔗 함수 호출 관계 (Call Graph)
+                    </h3>
+                    <button
+                      onClick={() => {
+                        if (!callGraphData) {
+                          loadCallGraph()
+                        }
+                        setShowCallGraph(!showCallGraph)
+                      }}
+                      style={{
+                        padding: '6px 12px',
+                        background: showCallGraph ? '#3b82f6' : '#f1f5f9',
+                        color: showCallGraph ? '#fff' : '#64748b',
+                        border: 'none',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        fontSize: '13px',
+                      }}
+                    >
+                      {showCallGraph ? '숨기기' : '분석 시작'}
+                    </button>
+                  </div>
+
+                  {showCallGraph && (
+                    <>
+                      {!callGraphData ? (
+                        <div style={{ textAlign: 'center', padding: '20px', color: '#64748b' }}>
+                          <div style={{ marginBottom: '8px' }}>⏳</div>
+                          함수 호출 관계 분석 중...
+                        </div>
+                      ) : (
+                        <div>
+                          {/* Call Graph 통계 */}
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', marginBottom: '16px' }}>
+                            <div style={{ padding: '10px', background: '#dbeafe', borderRadius: '6px', textAlign: 'center' }}>
+                              <div style={{ fontSize: '18px', fontWeight: 700, color: '#1e40af' }}>
+                                {callGraphData.stats.totalFunctions}
+                              </div>
+                              <div style={{ fontSize: '11px', color: '#3b82f6' }}>함수</div>
+                            </div>
+                            <div style={{ padding: '10px', background: '#dcfce7', borderRadius: '6px', textAlign: 'center' }}>
+                              <div style={{ fontSize: '18px', fontWeight: 700, color: '#166534' }}>
+                                {callGraphData.stats.totalCalls}
+                              </div>
+                              <div style={{ fontSize: '11px', color: '#22c55e' }}>호출 관계</div>
+                            </div>
+                            <div style={{ padding: '10px', background: '#ffedd5', borderRadius: '6px', textAlign: 'center' }}>
+                              <div style={{ fontSize: '18px', fontWeight: 700, color: '#c2410c' }}>
+                                {callGraphData.stats.totalApiCalls}
+                              </div>
+                              <div style={{ fontSize: '11px', color: '#f97316' }}>API 호출</div>
+                            </div>
+                          </div>
+
+                          {/* Call Graph Mermaid */}
+                          {callGraphData.mermaidCode && (
+                            <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden' }}>
+                              <MermaidDiagram
+                                chart={callGraphData.mermaidCode}
+                                enableZoom={true}
+                                showLegend={false}
+                                onNodeClick={(nodeId) => {
+                                  // 함수 노드 클릭 시 해당 함수로 이동
+                                  const node = callGraphData.nodes.find(n =>
+                                    n.id.includes(nodeId) || nodeId.includes(n.name)
+                                  )
+                                  if (node) {
+                                    const moduleName = node.file.split('/').pop()?.replace(/\.(ts|tsx|js|jsx)$/, '')
+                                    if (moduleName) {
+                                      handleModuleSelect(moduleName)
+                                    }
+                                  }
+                                }}
+                              />
+                            </div>
+                          )}
+
+                          {/* 핫스팟 함수 (가장 많이 호출되는 함수) */}
+                          {callGraphData.nodes.filter(n => n.calledByCount > 0).length > 0 && (
+                            <div style={{ marginTop: '16px' }}>
+                              <h4 style={{ margin: '0 0 8px', fontSize: '13px', color: '#64748b' }}>
+                                🔥 핫스팟 함수 (많이 호출됨)
+                              </h4>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                {callGraphData.nodes
+                                  .filter(n => n.calledByCount > 0)
+                                  .sort((a, b) => b.calledByCount - a.calledByCount)
+                                  .slice(0, 5)
+                                  .map((node, idx) => (
+                                    <div key={idx} style={{
+                                      padding: '8px 12px',
+                                      background: '#f8fafc',
+                                      borderRadius: '4px',
+                                      fontSize: '12px',
+                                      display: 'flex',
+                                      justifyContent: 'space-between',
+                                    }}>
+                                      <span style={{ color: '#1e293b', fontWeight: 500 }}>{node.name}()</span>
+                                      <span style={{ color: '#64748b' }}>{node.calledByCount}회 호출</span>
+                                    </div>
+                                  ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* API 호출 목록 */}
+                          {callGraphData.apiCalls.length > 0 && (
+                            <div style={{ marginTop: '16px' }}>
+                              <h4 style={{ margin: '0 0 8px', fontSize: '13px', color: '#64748b' }}>
+                                🌐 API 호출
+                              </h4>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                {callGraphData.apiCalls.slice(0, 5).map((api, idx) => (
+                                  <div key={idx} style={{
+                                    padding: '8px 12px',
+                                    background: '#eff6ff',
+                                    borderRadius: '4px',
+                                    fontSize: '12px',
+                                  }}>
+                                    <span style={{
+                                      padding: '2px 6px',
+                                      background: api.method === 'GET' ? '#22c55e' : api.method === 'POST' ? '#3b82f6' : '#f97316',
+                                      color: '#fff',
+                                      borderRadius: '3px',
+                                      fontSize: '10px',
+                                      marginRight: '8px',
+                                    }}>{api.method}</span>
+                                    <span style={{ color: '#1e293b' }}>{api.path}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
               </div>
             </div>
           </div>
