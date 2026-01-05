@@ -1857,7 +1857,33 @@ timeline
 | **2. 시각화** ⭐ | 다층 뷰 + 스텝바이스텝 + 에러 트레이스 + AI 설명 | ✅ UI 완료 |
 | **2-1. skott 통합** ⭐ | 실제 AST 분석 + 의존성 그래프 + 순환 탐지 | 📋 설계완료 |
 | **3. 안정화** | E2E 테스트 + 피드백 반영 | ✅ 완료 |
-| **4. 공개 배포** | GitHub OAuth + Vercel + 멀티테넌시 | 🔄 90% |
+| **4. 공개 배포** | GitHub OAuth + Vercel + 멀티테넌시 | 🔄 95% |
+
+---
+
+## 🆕 인증 시스템 이슈 현황 (2026-01-05)
+
+### 해결된 이슈
+
+| 이슈 | 설명 | 해결 방법 | PR |
+|------|------|----------|-----|
+| [#55](https://github.com/garimto81/project_master/issues/55) | `auth_failed` 에러 | 레거시 `/api/auth/callback` 삭제, Suspense boundary 추가 | [#56](https://github.com/garimto81/project_master/pull/56) |
+
+### 진행 중인 이슈
+
+| 이슈 | 설명 | 원인 | 상태 |
+|------|------|------|------|
+| [#57](https://github.com/garimto81/project_master/issues/57) | `invalid_code` 에러 | Supabase/GitHub OAuth 설정 불일치 추정 | 🔍 조사 중 |
+
+### 확인 필요 설정
+
+**Supabase Dashboard** (`uxfztmyqocirqzgjowzb`):
+- Authentication > URL Configuration > Site URL
+- Authentication > URL Configuration > Redirect URLs
+- Authentication > Providers > GitHub (Client ID/Secret)
+
+**GitHub OAuth App**:
+- Authorization callback URL: `https://uxfztmyqocirqzgjowzb.supabase.co/auth/v1/callback`
 
 ---
 
