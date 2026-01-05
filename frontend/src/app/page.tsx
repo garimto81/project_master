@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { type Repository } from '@/lib/api'
 import { signInWithGitHub, signOut } from '@/lib/supabase'
@@ -25,7 +25,7 @@ const AUTH_ERROR_MESSAGES: Record<string, string> = {
   supabase_not_configured: 'Supabase 설정이 올바르지 않습니다.',
 }
 
-export default function HomePage() {
+function HomePageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [searchTerm, setSearchTerm] = useState('')
@@ -330,5 +330,25 @@ export default function HomePage() {
         </section>
       </div>
     </main>
+  )
+}
+
+// Suspense로 감싸서 useSearchParams() 사용 가능하게 함
+export default function HomePage() {
+  return (
+    <Suspense fallback={
+      <main style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)',
+        color: '#fff',
+      }}>
+        <div>로딩 중...</div>
+      </main>
+    }>
+      <HomePageContent />
+    </Suspense>
   )
 }
