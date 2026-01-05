@@ -131,7 +131,9 @@ export function useProjectAnalysis(repoFullName: string) {
   const isAnalyzing = statusData?.status === 'analyzing'
   const isReady = isCached
   const progress = statusData?.progress ?? (isCached ? 100 : 0)
-  const error = statusData?.error ?? (cacheError ? String(cacheError) : undefined)
+  const error = statusData?.error ??
+    (cacheError instanceof Error ? cacheError.message :
+     cacheError ? String(cacheError) : undefined)
 
   return {
     // 데이터
