@@ -1863,11 +1863,29 @@ timeline
 
 ## 🆕 인증 시스템 이슈 현황 (2026-01-05)
 
+### 배포 현황
+
+| 항목 | 값 |
+|------|-----|
+| **프로덕션 URL** | https://frontend-xi-seven.vercel.app |
+| **Vercel 프로젝트** | `project_master` |
+| **Supabase 프로젝트** | `uxfztmyqocirqzgjowzb` |
+| **타이틀** | DevFlow ✅ |
+
+### 오늘 수정된 파일
+
+| 파일 | 변경 내용 |
+|------|----------|
+| `frontend/src/app/api/auth/callback/route.ts` | ❌ 삭제 (레거시, 쿠키 미저장 문제) |
+| `frontend/src/app/auth/callback/route.ts` | 상세 에러 코드 추가 (code_expired, invalid_code) |
+| `frontend/src/app/page.tsx` | OAuth 에러 표시 + Suspense boundary 추가 |
+| `frontend/tests/e2e/login.spec.ts` | AUTH-E05, AUTH-E06 테스트 추가 |
+
 ### 해결된 이슈
 
 | 이슈 | 설명 | 해결 방법 | PR |
 |------|------|----------|-----|
-| [#55](https://github.com/garimto81/project_master/issues/55) | `auth_failed` 에러 | 레거시 `/api/auth/callback` 삭제, Suspense boundary 추가 | [#56](https://github.com/garimto81/project_master/pull/56) |
+| [#55](https://github.com/garimto81/project_master/issues/55) | `auth_failed` 에러 | 레거시 `/api/auth/callback` 삭제, Suspense boundary 추가 | [#56](https://github.com/garimto81/project_master/pull/56) ✅ Merged |
 
 ### 진행 중인 이슈
 
@@ -1875,15 +1893,80 @@ timeline
 |------|------|------|------|
 | [#57](https://github.com/garimto81/project_master/issues/57) | `invalid_code` 에러 | Supabase/GitHub OAuth 설정 불일치 추정 | 🔍 조사 중 |
 
-### 확인 필요 설정
+### 기술적 변경사항
+
+#### 1. OAuth 콜백 개선
+
+**Before (문제)**:
+```
+/api/auth/callback → createClient() → 세션 쿠키 미저장 → 인증 실패
+```
+
+**After (해결)**:
+```
+/auth/callback → createServerClient() → 세션 쿠키 저장 → 인증 성공
+```
+
+#### 2. Next.js 14 Suspense 대응
+
+```typescript
+// useSearchParams()는 Suspense boundary 필수
+export default function HomePage() {
+  return (
+    <Suspense fallback={<Loading />}>
+      <HomePageContent />  // useSearchParams() 사용
+    </Suspense>
+  )
+}
+```
+
+#### 3. OAuth 에러 표시
+
+```typescript
+// URL 파라미터로 에러 전달: /?error=auth_failed
+const AUTH_ERROR_MESSAGES = {
+  auth_failed: '인증에 실패했습니다.',
+  code_expired: '인증 코드가 만료되었습니다.',
+  invalid_code: '유효하지 않은 인증 코드입니다.',
+}
+```
+
+### 확인 필요 설정 (Issue #57)
 
 **Supabase Dashboard** (`uxfztmyqocirqzgjowzb`):
-- Authentication > URL Configuration > Site URL
-- Authentication > URL Configuration > Redirect URLs
-- Authentication > Providers > GitHub (Client ID/Secret)
+1. Authentication > URL Configuration
+   - Site URL: `https://frontend-xi-seven.vercel.app`
+   - Redirect URLs: `https://frontend-xi-seven.vercel.app/auth/callback` 포함
 
-**GitHub OAuth App**:
+2. Authentication > Providers > GitHub
+   - Client ID: GitHub OAuth App에서 복사
+   - Client Secret: GitHub OAuth App에서 복사
+
+**GitHub OAuth App** (https://github.com/settings/developers):
 - Authorization callback URL: `https://uxfztmyqocirqzgjowzb.supabase.co/auth/v1/callback`
+
+### 인증 흐름 다이어그램
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant N as Next.js
+    participant S as Supabase
+    participant G as GitHub
+
+    U->>N: 1. 로그인 버튼 클릭
+    N->>S: 2. signInWithOAuth({provider: 'github'})
+    S->>G: 3. OAuth 리다이렉트
+    G->>U: 4. 권한 승인
+    U->>G: 5. 승인
+    G->>S: 6. Authorization Code
+    S->>S: 7. Code → Token 교환
+    S->>N: 8. /auth/callback?code=xxx
+    N->>S: 9. exchangeCodeForSession(code)
+    Note over N: ⚠️ Issue #57: invalid_code 발생
+    S->>N: 10. Session + provider_token
+    N->>U: 11. 대시보드로 리다이렉트
+```
 
 ---
 
