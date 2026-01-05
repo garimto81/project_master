@@ -101,4 +101,32 @@ test.describe('로그인/로그아웃 플로우', () => {
 
     expect(isLoginVisible || isDashboardVisible).toBeTruthy();
   });
+
+  test('AUTH-E05: OAuth 에러 파라미터 표시 (Issue #55)', async ({ page }) => {
+    // OAuth 콜백에서 에러가 발생하면 ?error=auth_failed로 리다이렉트됨
+    // 이 에러는 사용자에게 표시되어야 함
+    await page.goto('/?error=auth_failed');
+
+    // 로딩 완료 대기
+    await page.waitForSelector('[data-testid="login-page"]', { timeout: 10000 });
+
+    // 에러 메시지가 표시되어야 함
+    const errorElement = page.getByTestId('login-error');
+    await expect(errorElement).toBeVisible();
+    await expect(errorElement).toContainText('인증');
+
+    // URL에서 에러 파라미터가 제거되어야 함 (replace로 제거됨)
+    await page.waitForURL('/', { timeout: 5000 });
+  });
+
+  test('AUTH-E06: 코드 만료 에러 표시', async ({ page }) => {
+    // OAuth 코드 만료 시
+    await page.goto('/?error=code_expired');
+
+    await page.waitForSelector('[data-testid="login-page"]', { timeout: 10000 });
+
+    const errorElement = page.getByTestId('login-error');
+    await expect(errorElement).toBeVisible();
+    await expect(errorElement).toContainText('만료');
+  });
 });

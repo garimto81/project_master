@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { type Repository } from '@/lib/api'
 import { signInWithGitHub, signOut } from '@/lib/supabase'
 import { useAuth, useRepositories } from '@/lib/hooks'
@@ -17,11 +17,31 @@ const LANGUAGE_COLORS: Record<string, string> = {
   default: '#64748b',
 }
 
+// OAuth 에러 메시지 매핑
+const AUTH_ERROR_MESSAGES: Record<string, string> = {
+  auth_failed: '인증에 실패했습니다. 다시 시도해주세요.',
+  code_expired: '인증 코드가 만료되었습니다. 다시 로그인해주세요.',
+  invalid_code: '유효하지 않은 인증 코드입니다. 다시 시도해주세요.',
+  supabase_not_configured: 'Supabase 설정이 올바르지 않습니다.',
+}
+
 export default function HomePage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [searchTerm, setSearchTerm] = useState('')
   const [loginError, setLoginError] = useState<string | null>(null)
   const [isLoggingIn, setIsLoggingIn] = useState(false)
+
+  // URL에서 에러 파라미터 확인 (OAuth 콜백에서 리다이렉트된 경우)
+  useEffect(() => {
+    const errorParam = searchParams.get('error')
+    if (errorParam) {
+      const errorMessage = AUTH_ERROR_MESSAGES[errorParam] || AUTH_ERROR_MESSAGES.auth_failed
+      setLoginError(errorMessage)
+      // URL에서 에러 파라미터 제거 (히스토리에 남지 않도록)
+      router.replace('/', { scroll: false })
+    }
+  }, [searchParams, router])
 
   // SWR 기반 캐시 hooks
   const { isLoggedIn, isLoading: isAuthLoading, refresh: refreshAuth } = useAuth()

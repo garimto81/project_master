@@ -43,8 +43,14 @@ export async function GET(request: NextRequest) {
     const { error } = await supabase.auth.exchangeCodeForSession(code)
 
     if (error) {
-      console.error('Auth code exchange error:', error)
-      return NextResponse.redirect(`${origin}/?error=auth_failed`)
+      console.error('Auth code exchange error:', error.message, error)
+      // 에러 유형에 따른 상세 에러 코드
+      const errorCode = error.message?.includes('expired')
+        ? 'code_expired'
+        : error.message?.includes('invalid')
+          ? 'invalid_code'
+          : 'auth_failed'
+      return NextResponse.redirect(`${origin}/?error=${errorCode}`)
     }
 
     // 성공 시 returnTo 또는 홈으로 리다이렉트
