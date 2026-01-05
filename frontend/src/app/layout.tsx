@@ -2,8 +2,8 @@ import type { Metadata } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'GitCommand Center',
-  description: 'AI-Native Developer Dashboard',
+  title: 'DevFlow',
+  description: '비개발자를 위한 AI 협업 개발 플랫폼',
 }
 
 export default function RootLayout({
