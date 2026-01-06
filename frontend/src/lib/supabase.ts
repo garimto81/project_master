@@ -1,5 +1,5 @@
 /**
- * Supabase Client for DevFlow
+ * Supabase Client for DevFlow - Browser Side
  * PRD v6.1: 2-tier 아키텍처 (Vercel + Supabase)
  *
  * 브라우저 클라이언트 - 쿠키 기반 세션 저장
@@ -8,17 +8,19 @@
 
 import { createBrowserClient } from '@supabase/ssr'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import {
+  SUPABASE_URL,
+  SUPABASE_ANON_KEY,
+  isSupabaseConfigured as _isSupabaseConfigured,
+  GITHUB_OAUTH_SCOPES,
+} from './auth-utils'
 
-// Supabase URL과 익명 키 (환경변수에서 로드)
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-
-// Supabase 설정 여부 확인 (테스트/개발 환경용)
-export const isSupabaseConfigured = !!(supabaseUrl && supabaseAnonKey)
+// Re-export for backward compatibility
+export const isSupabaseConfigured = _isSupabaseConfigured
 
 // Supabase 클라이언트 인스턴스 (쿠키 기반, 서버와 세션 공유)
 export const supabase: SupabaseClient | null = isSupabaseConfigured
-  ? createBrowserClient(supabaseUrl, supabaseAnonKey)
+  ? createBrowserClient(SUPABASE_URL, SUPABASE_ANON_KEY)
   : null
 
 /**
@@ -39,7 +41,7 @@ export async function signInWithGitHub(returnTo?: string) {
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: 'github',
     options: {
-      scopes: 'read:user user:email repo',
+      scopes: GITHUB_OAUTH_SCOPES,
       redirectTo: callbackUrl
     }
   })
