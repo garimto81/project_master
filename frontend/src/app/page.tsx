@@ -21,8 +21,10 @@ const LANGUAGE_COLORS: Record<string, string> = {
 const AUTH_ERROR_MESSAGES: Record<string, string> = {
   auth_failed: '인증에 실패했습니다. 다시 시도해주세요.',
   code_expired: '인증 코드가 만료되었습니다. 다시 로그인해주세요.',
-  invalid_code: '유효하지 않은 인증 코드입니다. 다시 시도해주세요.',
-  supabase_not_configured: 'Supabase 설정이 올바르지 않습니다.',
+  invalid_code: '인증 코드가 유효하지 않습니다. 브라우저 새로고침 후 다시 시도해주세요.',
+  code_missing: '인증 코드가 전달되지 않았습니다. 다시 시도해주세요.',
+  pkce_error: '인증 세션이 만료되었습니다. 브라우저 쿠키를 확인하고 다시 로그인해주세요.',
+  supabase_not_configured: '서버 설정 오류입니다. 관리자에게 문의하세요.',
 }
 
 function HomePageContent() {
