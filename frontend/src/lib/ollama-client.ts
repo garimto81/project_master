@@ -7,7 +7,7 @@
 
 // Ollama API 설정
 const OLLAMA_BASE_URL = process.env.OLLAMA_URL || 'http://localhost:11434'
-const DEFAULT_MODEL = process.env.OLLAMA_MODEL || 'qwen3'
+const DEFAULT_MODEL = process.env.OLLAMA_MODEL || 'qwen3:8b'
 const TIMEOUT_MS = 30000
 
 interface OllamaGenerateRequest {
@@ -24,6 +24,7 @@ interface OllamaGenerateRequest {
 interface OllamaGenerateResponse {
   model: string
   response: string
+  thinking?: string  // Qwen3 thinking mode
   done: boolean
   context?: number[]
   total_duration?: number
@@ -47,6 +48,7 @@ const CACHE_TTL = 10 * 60 * 1000 // 10분
 
 /**
  * Ollama API 호출
+ * Qwen3 모델은 think: false 옵션으로 thinking 모드 비활성화
  */
 async function callOllama(prompt: string, model: string = DEFAULT_MODEL): Promise<string> {
   try {
@@ -57,12 +59,13 @@ async function callOllama(prompt: string, model: string = DEFAULT_MODEL): Promis
         model,
         prompt,
         stream: false,
+        think: false,  // Qwen3 thinking 모드 비활성화
         options: {
           temperature: 0.3,
           top_p: 0.9,
           num_predict: 512,
         },
-      } as OllamaGenerateRequest),
+      }),
       signal: AbortSignal.timeout(TIMEOUT_MS),
     })
 
@@ -71,7 +74,7 @@ async function callOllama(prompt: string, model: string = DEFAULT_MODEL): Promis
     }
 
     const data: OllamaGenerateResponse = await response.json()
-    return data.response.trim()
+    return data.response?.trim() || ''
   } catch (error) {
     console.error('[Ollama] API call failed:', error)
     throw error
