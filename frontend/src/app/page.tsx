@@ -95,7 +95,18 @@ function HomePageContent() {
         background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)',
         color: '#fff',
       }}>
-        <h1 style={{ fontSize: '3rem', marginBottom: '0.5rem' }}>DevFlow</h1>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: '12px' }}>
+          <h1 style={{ fontSize: '3rem', marginBottom: '0' }}>DevFlow</h1>
+          <span data-testid="version-badge" style={{
+            fontSize: '0.75rem',
+            color: '#64748b',
+            background: 'rgba(100, 116, 139, 0.2)',
+            padding: '2px 8px',
+            borderRadius: '4px',
+          }}>
+            v{process.env.NEXT_PUBLIC_APP_VERSION || '6.2.0'}
+          </span>
+        </div>
         <p style={{ color: '#94a3b8', marginBottom: '2rem' }}>비개발자를 위한 AI 협업 개발 플랫폼</p>
 
         {loginError && (
@@ -155,17 +166,6 @@ function HomePageContent() {
             </>
           )}
         </button>
-
-        {/* 버전 정보 */}
-        <div data-testid="version-info" style={{
-          position: 'absolute',
-          bottom: '20px',
-          fontSize: '0.75rem',
-          color: '#64748b',
-          textAlign: 'center',
-        }}>
-          v{process.env.NEXT_PUBLIC_APP_VERSION || '6.2.0'} | Build: {process.env.NEXT_PUBLIC_BUILD_TIME ? new Date(process.env.NEXT_PUBLIC_BUILD_TIME).toLocaleString('ko-KR') : 'dev'}
-        </div>
       </main>
     )
   }
@@ -185,7 +185,18 @@ function HomePageContent() {
         justifyContent: 'space-between',
         alignItems: 'center',
       }}>
-        <h1 style={{ margin: 0, fontSize: '1.5rem', color: '#1e293b' }}>DevFlow</h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <h1 style={{ margin: 0, fontSize: '1.5rem', color: '#1e293b' }}>DevFlow</h1>
+          <span style={{
+            fontSize: '0.65rem',
+            color: '#64748b',
+            background: '#f1f5f9',
+            padding: '2px 6px',
+            borderRadius: '4px',
+          }}>
+            v{process.env.NEXT_PUBLIC_APP_VERSION || '6.2.0'}
+          </span>
+        </div>
         <button
           data-testid="logout-btn"
           onClick={async () => {
