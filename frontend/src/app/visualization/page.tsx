@@ -17,6 +17,7 @@ import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import { signInWithGitHub } from '@/lib/supabase'
 import { useProjectAnalysis } from '@/lib/hooks/useProjectAnalysis'
+import { useLLMAnalysis } from '@/lib/hooks/useLLMAnalysis'
 import type { AnalysisResult, RiskPoint as TypedRiskPoint, Layer as TypedLayer } from '@/lib/types'
 
 // 클라이언트 컴포넌트 동적 로드
@@ -172,6 +173,16 @@ function VisualizationContent() {
   const [filesProcessed, setFilesProcessed] = useState<number>(0)
   const [totalFiles, setTotalFiles] = useState<number>(0)
   const [abortController, setAbortController] = useState<AbortController | null>(null)
+
+  // Issue #61, #62: LLM 분석
+  const {
+    isAnalyzing: isLLMAnalyzing,
+    llmStatus,
+    moduleAnalyses,
+    checkLLMStatus,
+    analyzeModuleTitles,
+    analyzeModuleDescriptions,
+  } = useLLMAnalysis()
 
   // 브레드크럼 생성
   const breadcrumbs = [
@@ -362,6 +373,26 @@ function VisualizationContent() {
       loadRepos()
     }
   }, [viewLevel, loadRepos])
+
+  // Issue #61, #62: LLM 상태 확인 (시작 시 한 번)
+  useEffect(() => {
+    checkLLMStatus()
+  }, [checkLLMStatus])
+
+  // Issue #61, #62: 레이어 선택 시 LLM 분석 트리거
+  useEffect(() => {
+    if (viewLevel === 'layer-detail' && selectedLayer && selectedRepo && analyzeData) {
+      const layer = analyzeData.data_flow.layers.find(l => l.displayName === selectedLayer)
+      if (layer && layer.modules.length > 0 && llmStatus?.available) {
+        // 분석할 파일 목록 생성
+        const files = layer.modules.slice(0, 5).map(mod => ({
+          path: `src/${mod}.tsx`, // 추정 경로
+          layer: layer.name,
+        }))
+        analyzeModuleTitles(selectedRepo, files)
+      }
+    }
+  }, [viewLevel, selectedLayer, selectedRepo, analyzeData, llmStatus, analyzeModuleTitles])
 
   // 이슈 #44: 캐시된 분석 결과를 analyzeData로 변환
   useEffect(() => {
@@ -1261,14 +1292,30 @@ function VisualizationContent() {
                             </div>
                           )}
 
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                            <span style={{ fontSize: '20px' }}>{colors.icon}</span>
-                            <h4 style={{ margin: 0, color: '#1e293b', fontSize: '15px' }}>{mod}</h4>
-                          </div>
+                          {/* LLM 분석 결과 또는 기본 표시 (Issue #61, #62) */}
+                          {(() => {
+                            const llmResult = moduleAnalyses.get(`src/${mod}.tsx`)
+                            return (
+                              <>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                                  <span style={{ fontSize: '20px' }}>{llmResult?.icon || colors.icon}</span>
+                                  <h4 style={{ margin: 0, color: '#1e293b', fontSize: '15px' }}>
+                                    {llmResult?.title || mod}
+                                  </h4>
+                                </div>
 
-                          <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>
-                            클릭하여 함수 목록 보기 →
-                          </p>
+                                {llmResult?.description ? (
+                                  <p style={{ margin: '0 0 8px', fontSize: '12px', color: '#475569' }}>
+                                    {llmResult.description}
+                                  </p>
+                                ) : null}
+
+                                <p style={{ margin: 0, fontSize: '11px', color: '#94a3b8' }}>
+                                  {mod} · 클릭하여 상세보기 →
+                                </p>
+                              </>
+                            )
+                          })()}
                         </div>
                       )
                     })}
@@ -1293,6 +1340,30 @@ function VisualizationContent() {
                       <div style={{ fontSize: '14px', color: '#64748b' }}>
                         <strong>{layer.modules.length}</strong>개 모듈
                       </div>
+                    </div>
+
+                    {/* Issue #61, #62: LLM 분석 상태 */}
+                    <div style={{
+                      padding: '16px',
+                      background: llmStatus?.available ? '#f0fdf4' : '#fef2f2',
+                      borderRadius: '12px',
+                      border: `1px solid ${llmStatus?.available ? '#86efac' : '#fecaca'}`,
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                        <span>{llmStatus?.available ? '🤖' : '⚠️'}</span>
+                        <h4 style={{ margin: 0, fontSize: '14px', color: '#1e293b' }}>
+                          LLM 분석 {llmStatus?.available ? '활성' : '비활성'}
+                        </h4>
+                      </div>
+                      {llmStatus?.available ? (
+                        <p style={{ margin: 0, fontSize: '12px', color: '#166534' }}>
+                          {isLLMAnalyzing ? '분석 중...' : `Ollama (${llmStatus.models[0] || 'qwen3'}) 연결됨`}
+                        </p>
+                      ) : (
+                        <p style={{ margin: 0, fontSize: '12px', color: '#dc2626' }}>
+                          Ollama 서버 미실행. `ollama serve` 실행 필요
+                        </p>
+                      )}
                     </div>
 
                     {/* 위험도 범례 */}

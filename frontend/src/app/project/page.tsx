@@ -8,6 +8,7 @@ import useSWR from 'swr'
 import { getAvailableModels } from '@/lib/api'
 import AIRedirectModal from '@/components/ai-redirect/AIRedirectModal'
 import AnalysisProgressBar, { type AnalysisStage } from '@/components/visualization/AnalysisProgressBar'
+import { useLLMAnalysis } from '@/lib/hooks/useLLMAnalysis'
 import type { FileAnalysis, LayerType, FunctionInfo } from '@/lib/ast-analyzer'
 
 // ReactFlowDiagram 동적 로드 (SSR 비활성화)
@@ -204,6 +205,15 @@ function ProjectContent() {
   const [analysisPercent, setAnalysisPercent] = useState(0)
   const [analysisMessage, setAnalysisMessage] = useState('')
 
+  // Issue #61, #62: LLM 분석
+  const {
+    isAnalyzing: isLLMAnalyzing,
+    llmStatus,
+    moduleAnalyses,
+    checkLLMStatus,
+    analyzeModuleTitles,
+  } = useLLMAnalysis()
+
   const abortControllerRef = useRef<AbortController | null>(null)
 
   // SWR fetcher 함수
@@ -297,6 +307,28 @@ function ProjectContent() {
     }
     fetchModels()
   }, [testMode])
+
+  // Issue #61, #62: LLM 상태 확인
+  useEffect(() => {
+    checkLLMStatus()
+  }, [checkLLMStatus])
+
+  // Issue #61, #62: 다이어그램 데이터 로드 시 LLM 분석 트리거
+  useEffect(() => {
+    if (diagramData && llmStatus?.available && repoParam) {
+      // 모든 레이어의 모듈을 수집
+      const allFiles = diagramData.data_flow.layers.flatMap(layer =>
+        layer.modules.slice(0, 3).map(mod => ({
+          path: `src/${mod}.tsx`,
+          layer: layer.name,
+        }))
+      ).slice(0, 10) // 최대 10개만 분석
+
+      if (allFiles.length > 0) {
+        analyzeModuleTitles(repoParam, allFiles)
+      }
+    }
+  }, [diagramData, llmStatus, repoParam, analyzeModuleTitles])
 
   // Progress Bar 업데이트 (로딩 중일 때만)
   useEffect(() => {
