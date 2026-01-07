@@ -1,36 +1,41 @@
 /**
- * Ollama Local LLM Client
- * Local Ollama (Qwen3) 모델을 사용한 코드 분석
+ * LLM Client - Google Gemini API
+ * 코드 분석을 위한 LLM 클라이언트
  *
  * Issues: #61, #62
+ *
+ * 지원 모델:
+ * - Gemini 2.0 Flash (기본) - 빠르고 저렴
+ * - Gemini 1.5 Pro - 더 높은 품질
  */
 
-// Ollama API 설정
-const OLLAMA_BASE_URL = process.env.OLLAMA_URL || 'http://localhost:11434'
-const DEFAULT_MODEL = process.env.OLLAMA_MODEL || 'qwen3:8b'
+// Gemini API 설정
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || ''
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.0-flash'
 const TIMEOUT_MS = 30000
 
-interface OllamaGenerateRequest {
-  model: string
-  prompt: string
-  stream?: boolean
-  options?: {
+interface GeminiRequest {
+  contents: Array<{
+    parts: Array<{ text: string }>
+  }>
+  generationConfig?: {
     temperature?: number
-    top_p?: number
-    num_predict?: number
+    topP?: number
+    maxOutputTokens?: number
   }
 }
 
-interface OllamaGenerateResponse {
-  model: string
-  response: string
-  thinking?: string  // Qwen3 thinking mode
-  done: boolean
-  context?: number[]
-  total_duration?: number
-  load_duration?: number
-  prompt_eval_count?: number
-  eval_count?: number
+interface GeminiResponse {
+  candidates: Array<{
+    content: {
+      parts: Array<{ text: string }>
+    }
+    finishReason: string
+  }>
+  usageMetadata?: {
+    promptTokenCount: number
+    candidatesTokenCount: number
+  }
 }
 
 interface ModuleAnalysis {
@@ -47,60 +52,53 @@ const analysisCache = new Map<string, ModuleAnalysis>()
 const CACHE_TTL = 10 * 60 * 1000 // 10분
 
 /**
- * Ollama API 호출
- * Qwen3 모델은 think: false 옵션으로 thinking 모드 비활성화
+ * Gemini API 호출
  */
-async function callOllama(prompt: string, model: string = DEFAULT_MODEL): Promise<string> {
+async function callGemini(prompt: string): Promise<string> {
+  if (!GEMINI_API_KEY) {
+    throw new Error('GEMINI_API_KEY가 설정되지 않았습니다')
+  }
+
   try {
-    const response = await fetch(`${OLLAMA_BASE_URL}/api/generate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model,
-        prompt,
-        stream: false,
-        think: false,  // Qwen3 thinking 모드 비활성화
-        options: {
-          temperature: 0.3,
-          top_p: 0.9,
-          num_predict: 512,
-        },
-      }),
-      signal: AbortSignal.timeout(TIMEOUT_MS),
-    })
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0.3,
+            topP: 0.9,
+            maxOutputTokens: 512,
+          },
+        } as GeminiRequest),
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+      }
+    )
 
     if (!response.ok) {
-      throw new Error(`Ollama API error: ${response.status}`)
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(`Gemini API error: ${response.status} - ${JSON.stringify(errorData)}`)
     }
 
-    const data: OllamaGenerateResponse = await response.json()
-    return data.response?.trim() || ''
+    const data: GeminiResponse = await response.json()
+    return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || ''
   } catch (error) {
-    console.error('[Ollama] API call failed:', error)
+    console.error('[Gemini] API call failed:', error)
     throw error
   }
 }
 
 /**
- * Ollama 서버 상태 확인
+ * LLM 서버 상태 확인 (Gemini API)
  */
 export async function checkOllamaStatus(): Promise<{ available: boolean; models: string[] }> {
-  try {
-    const response = await fetch(`${OLLAMA_BASE_URL}/api/tags`, {
-      signal: AbortSignal.timeout(5000),
-    })
-
-    if (!response.ok) {
-      return { available: false, models: [] }
-    }
-
-    const data = await response.json()
-    const models = (data.models || []).map((m: { name: string }) => m.name)
-
-    return { available: true, models }
-  } catch {
-    return { available: false, models: [] }
+  // API 키가 있으면 사용 가능으로 표시
+  if (GEMINI_API_KEY) {
+    return { available: true, models: [GEMINI_MODEL] }
   }
+  return { available: false, models: [] }
 }
 
 /**
@@ -136,7 +134,7 @@ ${code.slice(0, 1500)}
 제목만 출력하세요 (설명 없이):`
 
   try {
-    const response = await callOllama(prompt)
+    const response = await callGemini(prompt)
     // 첫 줄만 추출, 따옴표 제거
     const title = response.split('\n')[0].replace(/['"]/g, '').trim()
 
@@ -196,7 +194,7 @@ ${code.slice(0, 2000)}
 3. 입력/출력은 최대 3개`
 
   try {
-    const response = await callOllama(prompt)
+    const response = await callGemini(prompt)
 
     // JSON 파싱 시도
     const jsonMatch = response.match(/\{[\s\S]*\}/)
@@ -263,7 +261,7 @@ ${code.slice(0, 1500)}
 3. 화살표(->)로 흐름 표시`
 
   try {
-    const response = await callOllama(prompt)
+    const response = await callGemini(prompt)
 
     const jsonMatch = response.match(/\{[\s\S]*\}/)
     if (jsonMatch) {

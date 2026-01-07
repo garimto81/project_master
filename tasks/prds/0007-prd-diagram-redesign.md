@@ -1,9 +1,86 @@
 # PRD: 코드 시각화 시스템 재설계
 
-**Version**: 1.4
+**Version**: 1.5
 **Date**: 2026-01-07
 **Status**: In Progress
 **PRD-ID**: PRD-0007
+
+---
+
+## v1.5 변경사항 (LLM 기반 모듈 분석 - Gemini API)
+
+### 배경
+
+기존 키워드 매핑 기반 모듈 제목/설명이 비개발자에게 불충분.
+Google Gemini API를 활용하여 코드 분석 기반 의미있는 제목/설명 생성.
+
+### 기술 스택
+
+| 항목 | 값 |
+|------|------|
+| **LLM Provider** | Google Gemini API |
+| **Model** | gemini-2.0-flash (기본) |
+| **대안 모델** | gemini-1.5-pro (고품질) |
+| **API 키** | 환경변수 `GEMINI_API_KEY` |
+
+### 구현 파일
+
+| 파일 | 역할 |
+|------|------|
+| `lib/ollama-client.ts` | Gemini API 클라이언트 (이름 유지) |
+| `lib/hooks/useLLMAnalysis.ts` | React Hook (프론트엔드 연동) |
+| `api/logic-flow/llm-analyze/route.ts` | REST API 엔드포인트 |
+
+### API 엔드포인트
+
+```
+POST /api/logic-flow/llm-analyze
+{
+  "repo": "owner/repo",
+  "files": [{ "path": "src/auth.ts", "layer": "logic" }],
+  "mode": "title" | "description" | "causality" | "batch"
+}
+```
+
+### 환경 변수 설정
+
+```env
+# .env.local (개발)
+GEMINI_API_KEY=your_gemini_api_key
+
+# Vercel 환경 변수 (배포)
+GEMINI_API_KEY=your_gemini_api_key
+GEMINI_MODEL=gemini-2.0-flash  # 선택적
+```
+
+### 기능
+
+| 기능 | 설명 | Issue |
+|------|------|-------|
+| 모듈 제목 생성 | 코드 분석 기반 한글 제목 | #61 |
+| 모듈 설명 생성 | 역할, 입력, 출력, 연관 모듈 | #62 |
+| 인과관계 분석 | 트리거, 효과, 데이터 흐름 | #60 |
+
+### Fallback 전략
+
+```
+Gemini API 호출
+    │
+    ├─ 성공 → LLM 생성 제목/설명 표시
+    │
+    └─ 실패 (API 키 없음, 오류)
+           │
+           └─ 기본 키워드 매핑 사용
+```
+
+### 비용 예상
+
+| 모델 | 입력 (1M tokens) | 출력 (1M tokens) |
+|------|------------------|------------------|
+| gemini-2.0-flash | $0.10 | $0.40 |
+| gemini-1.5-pro | $1.25 | $5.00 |
+
+예상 사용량: 프로젝트당 ~10K tokens → **월 $0.01 미만**
 
 ---
 
