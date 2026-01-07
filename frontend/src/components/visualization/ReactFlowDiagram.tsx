@@ -14,7 +14,7 @@
  * - 미니맵
  */
 
-import { useCallback, useMemo, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import ReactFlow, {
   Node,
   Edge,
@@ -25,6 +25,9 @@ import ReactFlow, {
   Position,
   ConnectionMode,
   ReactFlowProvider,
+  ReactFlowInstance,
+  useNodesState,
+  useEdgesState,
 } from 'reactflow'
 import 'reactflow/dist/style.css'
 
@@ -98,6 +101,28 @@ const LAYER_COLORS: Record<string, { bg: string; border: string; text: string }>
 // 메인 컴포넌트
 // ============================================================
 
+// 노드/엣지 생성 함수
+function generateNodesAndEdges(
+  mode: ViewMode,
+  files?: FileAnalysis[],
+  callGraph?: CallGraphResult,
+  causalityData?: CausalityData[]
+): { nodes: Node[]; edges: Edge[] } {
+  if (mode === 'layer' && files) {
+    const result = generateLayerView(files)
+    return { nodes: result.initialNodes, edges: result.initialEdges }
+  }
+  if (mode === 'flow' && callGraph) {
+    const result = generateFlowView(callGraph)
+    return { nodes: result.initialNodes, edges: result.initialEdges }
+  }
+  if (mode === 'causality' && causalityData) {
+    const result = generateCausalityView(causalityData)
+    return { nodes: result.initialNodes, edges: result.initialEdges }
+  }
+  return { nodes: [], edges: [] }
+}
+
 // 내부 Flow 컴포넌트 (ReactFlowProvider 내부에서 사용)
 function ReactFlowInner({
   mode,
@@ -106,29 +131,39 @@ function ReactFlowInner({
   causalityData,
   onNodeClick,
 }: ReactFlowDiagramProps) {
-  // 노드와 엣지 생성
-  const { initialNodes, initialEdges } = useMemo(() => {
-    if (mode === 'layer' && files) {
-      return generateLayerView(files)
-    }
-    if (mode === 'flow' && callGraph) {
-      return generateFlowView(callGraph)
-    }
-    if (mode === 'causality' && causalityData) {
-      return generateCausalityView(causalityData)
-    }
-    return { initialNodes: [], initialEdges: [] }
-  }, [mode, files, callGraph, causalityData])
+  // 초기 노드/엣지 생성 (props에서 직접 계산)
+  const initialData = generateNodesAndEdges(mode, files, callGraph, causalityData)
 
-  // useState로 노드/엣지 상태 관리 (초기값으로 바로 설정)
-  const [nodes, setNodes] = useState<Node[]>(initialNodes)
-  const [edges, setEdges] = useState<Edge[]>(initialEdges)
+  // useNodesState/useEdgesState로 노드/엣지 상태 관리 (React Flow 권장 방식)
+  const [nodes, setNodes, onNodesChange] = useNodesState(initialData.nodes)
+  const [edges, setEdges, onEdgesChange] = useEdgesState(initialData.edges)
+  const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null)
 
-  // 모드나 데이터가 변경되면 상태 업데이트
+  // props가 변경되면 노드/엣지 업데이트
   useEffect(() => {
-    setNodes(initialNodes)
-    setEdges(initialEdges)
-  }, [initialNodes, initialEdges])
+    const newData = generateNodesAndEdges(mode, files, callGraph, causalityData)
+    setNodes(newData.nodes)
+    setEdges(newData.edges)
+  }, [mode, files, callGraph, causalityData, setNodes, setEdges])
+
+  // React Flow 초기화 핸들러
+  const handleInit = useCallback((instance: ReactFlowInstance) => {
+    setReactFlowInstance(instance)
+    // 초기화 직후 fitView 호출
+    setTimeout(() => {
+      instance.fitView({ padding: 0.2, maxZoom: 1 })
+    }, 100)
+  }, [])
+
+  // 노드가 업데이트되면 fitView 호출
+  useEffect(() => {
+    if (reactFlowInstance && nodes.length > 0) {
+      // 약간의 지연 후 fitView 호출 (DOM 업데이트 후)
+      setTimeout(() => {
+        reactFlowInstance.fitView({ padding: 0.2, maxZoom: 1 })
+      }, 200)
+    }
+  }, [reactFlowInstance, nodes.length])
 
   // 노드 클릭 핸들러
   const handleNodeClick = useCallback(
@@ -163,26 +198,14 @@ function ReactFlowInner({
     <ReactFlow
       nodes={nodes}
       edges={edges}
-      onNodesChange={(changes) => {
-        setNodes((nds) => {
-          const updated = [...nds]
-          for (const change of changes) {
-            if (change.type === 'position' && change.position) {
-              const idx = updated.findIndex((n) => n.id === change.id)
-              if (idx !== -1) {
-                updated[idx] = { ...updated[idx], position: change.position }
-              }
-            }
-          }
-          return updated
-        })
-      }}
-      onEdgesChange={() => {}}
+      onNodesChange={onNodesChange}
+      onEdgesChange={onEdgesChange}
       onNodeClick={handleNodeClick}
+      onInit={handleInit}
       nodeTypes={nodeTypes}
       connectionMode={ConnectionMode.Loose}
       fitView
-      fitViewOptions={{ padding: 0.2 }}
+      fitViewOptions={{ padding: 0.2, maxZoom: 1 }}
       minZoom={0.3}
       maxZoom={2}
     >

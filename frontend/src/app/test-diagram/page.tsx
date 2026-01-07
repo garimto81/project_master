@@ -7,14 +7,10 @@
 import dynamic from 'next/dynamic'
 import ReactFlow, { Background, Controls, ReactFlowProvider } from 'reactflow'
 import 'reactflow/dist/style.css'
+import { ReactFlowDiagram } from '@/components/visualization/ReactFlowDiagram'
 
 const InteractiveFlowDiagram = dynamic(
   () => import('@/components/InteractiveFlowDiagram'),
-  { ssr: false }
-)
-
-const ReactFlowDiagram = dynamic(
-  () => import('@/components/visualization/ReactFlowDiagram'),
   { ssr: false }
 )
 
