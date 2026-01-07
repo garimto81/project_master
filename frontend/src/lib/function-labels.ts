@@ -273,3 +273,19 @@ function generateDescription(
 
   return `${layerText} ${displayName} ${typeText}입니다.`
 }
+
+/**
+ * 함수명에서 한글 라벨만 반환 (간단 버전)
+ */
+export function getFriendlyLabel(name: string): string {
+  const label = getFunctionLabel(name)
+  return label.displayName
+}
+
+/**
+ * 함수명에서 아이콘만 반환
+ */
+export function getFunctionIcon(name: string): string {
+  const label = getFunctionLabel(name)
+  return label.icon
+}

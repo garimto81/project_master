@@ -3,10 +3,12 @@
 /**
  * ReactFlowDiagram - React Flow 기반 인터랙티브 다이어그램
  * PRD-0007 Phase 4: 시각화 개선
+ * Issue #60: 인과관계 로직 시각화 개선
  *
  * Features:
  * - 레이어 뷰: 코드 구조 시각화
  * - 흐름 뷰: 함수 호출 관계
+ * - 인과관계 뷰: 트리거 → 함수 → 효과 체인 (NEW)
  * - 줌/팬/드래그 지원
  * - 커스텀 노드 타입
  * - 미니맵
@@ -31,6 +33,7 @@ import { LayerNode } from './nodes/LayerNode'
 import { FunctionNode } from './nodes/FunctionNode'
 import { ApiNode } from './nodes/ApiNode'
 import { DbNode } from './nodes/DbNode'
+import { CausalityNode } from './nodes/CausalityNode'
 import type { FileAnalysis } from '@/lib/ast-analyzer'
 import type { CallGraphResult } from '@/lib/call-graph-analyzer'
 
@@ -38,7 +41,22 @@ import type { CallGraphResult } from '@/lib/call-graph-analyzer'
 // 타입 정의
 // ============================================================
 
-export type ViewMode = 'layer' | 'flow'
+export type ViewMode = 'layer' | 'flow' | 'causality'
+
+// LLM 분석 결과 타입
+export interface CausalityData {
+  path: string
+  fileName: string
+  displayName: string
+  description: string
+  layer: string
+  triggers: string[]
+  effects: string[]
+  dataFlow: string[]
+  inputs: string[]
+  outputs: string[]
+  relatedModules: string[]
+}
 
 export interface ReactFlowDiagramProps {
   mode: ViewMode
@@ -46,6 +64,8 @@ export interface ReactFlowDiagramProps {
   files?: FileAnalysis[]
   // 흐름 뷰용 데이터
   callGraph?: CallGraphResult
+  // 인과관계 뷰용 데이터 (Issue #60)
+  causalityData?: CausalityData[]
   // 콜백
   onNodeClick?: (nodeId: string, nodeData: unknown) => void
 }
@@ -59,6 +79,7 @@ const nodeTypes = {
   function: FunctionNode,
   api: ApiNode,
   db: DbNode,
+  causality: CausalityNode,
 }
 
 // ============================================================
@@ -82,6 +103,7 @@ export function ReactFlowDiagram({
   mode,
   files,
   callGraph,
+  causalityData,
   onNodeClick,
 }: ReactFlowDiagramProps) {
   // 노드와 엣지 생성
@@ -92,8 +114,11 @@ export function ReactFlowDiagram({
     if (mode === 'flow' && callGraph) {
       return generateFlowView(callGraph)
     }
+    if (mode === 'causality' && causalityData) {
+      return generateCausalityView(causalityData)
+    }
     return { initialNodes: [], initialEdges: [] }
-  }, [mode, files, callGraph])
+  }, [mode, files, callGraph, causalityData])
 
   const [nodes, , onNodesChange] = useNodesState(initialNodes)
   const [edges, , onEdgesChange] = useEdgesState(initialEdges)
@@ -404,6 +429,163 @@ function generateFlowView(callGraph: CallGraphResult): {
             label: db.type,
           })
         }
+      }
+    }
+  }
+
+  return { initialNodes: nodes, initialEdges: edges }
+}
+
+// ============================================================
+// 인과관계 뷰 생성 (Issue #60)
+// ============================================================
+
+function generateCausalityView(causalityData: CausalityData[]): {
+  initialNodes: Node[]
+  initialEdges: Edge[]
+} {
+  const nodes: Node[] = []
+  const edges: Edge[] = []
+
+  // 레이어별 그룹화
+  const byLayer: Record<string, CausalityData[]> = {
+    ui: [],
+    logic: [],
+    api: [],
+    server: [],
+    data: [],
+    lib: [],
+  }
+
+  for (const item of causalityData) {
+    const layer = item.layer || 'logic'
+    if (!byLayer[layer]) byLayer[layer] = []
+    byLayer[layer].push(item)
+  }
+
+  // 레이어 순서 (인과관계 흐름 방향)
+  const layerOrder = ['ui', 'logic', 'api', 'server', 'data']
+  let yOffset = 50
+
+  // 레이어별 노드 배치
+  for (const layer of layerOrder) {
+    const items = byLayer[layer]
+    if (!items || items.length === 0) continue
+
+    const colors = LAYER_COLORS[layer] || LAYER_COLORS.unknown
+    let xOffset = 100
+
+    // 레이어 그룹 노드
+    nodes.push({
+      id: `layer-${layer}`,
+      type: 'layer',
+      position: { x: 20, y: yOffset },
+      data: {
+        layer,
+        label: getLayerLabel(layer),
+        fileCount: items.length,
+        functionCount: items.reduce((sum, i) => sum + (i.effects?.length || 0), 0),
+        colors,
+      },
+    })
+
+    // 모듈 노드들
+    for (const item of items.slice(0, 4)) {
+      const nodeId = `node-${item.path.replace(/[^a-zA-Z0-9]/g, '_')}`
+
+      nodes.push({
+        id: nodeId,
+        type: 'causality',
+        position: { x: xOffset + 200, y: yOffset },
+        data: {
+          label: item.fileName,
+          displayName: item.displayName || item.fileName,
+          description: item.description || '',
+          layer,
+          triggers: item.triggers || [],
+          effects: item.effects || [],
+          dataFlow: item.dataFlow || [],
+          inputs: item.inputs || [],
+          outputs: item.outputs || [],
+          isEntry: layer === 'ui',
+          isTerminal: layer === 'data',
+        },
+        sourcePosition: Position.Right,
+        targetPosition: Position.Left,
+      })
+
+      // 레이어 → 모듈 연결
+      edges.push({
+        id: `e-layer-${layer}-${nodeId}`,
+        source: `layer-${layer}`,
+        target: nodeId,
+        type: 'smoothstep',
+        style: { stroke: colors.border, strokeWidth: 1.5, strokeDasharray: '4 2' },
+        animated: false,
+      })
+
+      xOffset += 220
+    }
+
+    yOffset += 180
+  }
+
+  // 레이어 간 인과관계 연결 (트리거 → 효과 기반)
+  const layerPairs = [
+    { from: 'ui', to: 'logic', label: '사용자 이벤트', color: '#3b82f6' },
+    { from: 'logic', to: 'api', label: 'API 요청', color: '#22c55e' },
+    { from: 'logic', to: 'server', label: 'API 요청', color: '#22c55e' },
+    { from: 'api', to: 'data', label: '데이터 저장', color: '#f59e0b' },
+    { from: 'server', to: 'data', label: '데이터 저장', color: '#f59e0b' },
+  ]
+
+  for (const pair of layerPairs) {
+    const fromItems = byLayer[pair.from] || []
+    const toItems = byLayer[pair.to] || []
+
+    if (fromItems.length > 0 && toItems.length > 0) {
+      edges.push({
+        id: `e-causality-${pair.from}-${pair.to}`,
+        source: `layer-${pair.from}`,
+        target: `layer-${pair.to}`,
+        type: 'smoothstep',
+        markerEnd: { type: MarkerType.ArrowClosed, color: pair.color },
+        style: { stroke: pair.color, strokeWidth: 3 },
+        animated: true,
+        label: pair.label,
+        labelStyle: { fontSize: 11, fontWeight: 600 },
+        labelBgStyle: { fill: '#fff', fillOpacity: 0.9 },
+      })
+    }
+  }
+
+  // 모듈 간 인과관계 연결 (relatedModules 기반)
+  for (const item of causalityData) {
+    if (!item.relatedModules || item.relatedModules.length === 0) continue
+
+    const sourceId = `node-${item.path.replace(/[^a-zA-Z0-9]/g, '_')}`
+
+    for (const related of item.relatedModules.slice(0, 2)) {
+      // 관련 모듈 찾기
+      const target = causalityData.find((d) =>
+        d.fileName.toLowerCase().includes(related.toLowerCase()) ||
+        d.displayName?.toLowerCase().includes(related.toLowerCase())
+      )
+
+      if (target) {
+        const targetId = `node-${target.path.replace(/[^a-zA-Z0-9]/g, '_')}`
+
+        edges.push({
+          id: `e-related-${sourceId}-${targetId}`,
+          source: sourceId,
+          target: targetId,
+          type: 'smoothstep',
+          markerEnd: { type: MarkerType.Arrow },
+          style: { stroke: '#94a3b8', strokeWidth: 1.5, strokeDasharray: '5 3' },
+          animated: false,
+          label: '연관',
+          labelStyle: { fontSize: 9 },
+        })
       }
     }
   }
