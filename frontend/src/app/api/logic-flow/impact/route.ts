@@ -8,8 +8,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getGitHubTokenFromSession } from '@/lib/auth'
 import { analyzeCallGraph } from '@/lib/call-graph-analyzer'
-import { analyzeImpact, analyzeImpactByName } from '@/lib/impact-analyzer'
-import { analysisCache, treeCache, GitHubTreeItem } from '@/lib/analysis-cache'
+import { analyzeImpactByName } from '@/lib/impact-analyzer'
+import { treeCache, GitHubTreeItem } from '@/lib/analysis-cache'
 import type { ImpactAnalyzeRequest, ImpactAnalyzeResponse } from '@/lib/types/sequence'
 
 export async function POST(request: NextRequest): Promise<NextResponse<ImpactAnalyzeResponse>> {

@@ -137,18 +137,15 @@ export async function POST(request: NextRequest): Promise<NextResponse<SequenceA
       )
     }
 
-    // 8. Mermaid 코드 추가
-    const mermaidCode = generateMermaidSequence(flow)
-    flow = {
-      ...flow,
-      // Mermaid 코드는 별도 필드로 응답
-    }
+    // 8. Mermaid 코드 생성
+    const mermaid = generateMermaidSequence(flow)
 
     const analysisTimeMs = Date.now() - startTime
 
     return NextResponse.json({
       success: true,
       flow,
+      mermaid,
       analysisTimeMs,
     })
   } catch (error) {

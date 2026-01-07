@@ -181,7 +181,6 @@ function VisualizationContent() {
     moduleAnalyses,
     checkLLMStatus,
     analyzeModuleTitles,
-    analyzeModuleDescriptions,
   } = useLLMAnalysis()
 
   // 브레드크럼 생성

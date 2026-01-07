@@ -207,9 +207,7 @@ function ProjectContent() {
 
   // Issue #61, #62: LLM 분석
   const {
-    isAnalyzing: isLLMAnalyzing,
     llmStatus,
-    moduleAnalyses,
     checkLLMStatus,
     analyzeModuleTitles,
   } = useLLMAnalysis()
