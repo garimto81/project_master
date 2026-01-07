@@ -14,18 +14,17 @@
  * - 미니맵
  */
 
-import { useCallback, useMemo } from 'react'
+import { useCallback, useMemo, useEffect, useState } from 'react'
 import ReactFlow, {
   Node,
   Edge,
   Background,
   Controls,
   MiniMap,
-  useNodesState,
-  useEdgesState,
   MarkerType,
   Position,
   ConnectionMode,
+  ReactFlowProvider,
 } from 'reactflow'
 import 'reactflow/dist/style.css'
 
@@ -99,7 +98,8 @@ const LAYER_COLORS: Record<string, { bg: string; border: string; text: string }>
 // 메인 컴포넌트
 // ============================================================
 
-export function ReactFlowDiagram({
+// 내부 Flow 컴포넌트 (ReactFlowProvider 내부에서 사용)
+function ReactFlowInner({
   mode,
   files,
   callGraph,
@@ -120,8 +120,15 @@ export function ReactFlowDiagram({
     return { initialNodes: [], initialEdges: [] }
   }, [mode, files, callGraph, causalityData])
 
-  const [nodes, , onNodesChange] = useNodesState(initialNodes)
-  const [edges, , onEdgesChange] = useEdgesState(initialEdges)
+  // useState로 노드/엣지 상태 관리 (초기값으로 바로 설정)
+  const [nodes, setNodes] = useState<Node[]>(initialNodes)
+  const [edges, setEdges] = useState<Edge[]>(initialEdges)
+
+  // 모드나 데이터가 변경되면 상태 업데이트
+  useEffect(() => {
+    setNodes(initialNodes)
+    setEdges(initialEdges)
+  }, [initialNodes, initialEdges])
 
   // 노드 클릭 핸들러
   const handleNodeClick = useCallback(
@@ -131,38 +138,80 @@ export function ReactFlowDiagram({
     [onNodeClick]
   )
 
+  // 데이터가 없으면 안내 메시지 표시
+  if (nodes.length === 0) {
+    return (
+      <div
+        style={{
+          width: '100%',
+          height: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: '#64748b',
+          flexDirection: 'column',
+          gap: '12px',
+        }}
+      >
+        <div style={{ fontSize: '48px' }}>📊</div>
+        <div>다이어그램을 로드 중...</div>
+      </div>
+    )
+  }
+
+  return (
+    <ReactFlow
+      nodes={nodes}
+      edges={edges}
+      onNodesChange={(changes) => {
+        setNodes((nds) => {
+          const updated = [...nds]
+          for (const change of changes) {
+            if (change.type === 'position' && change.position) {
+              const idx = updated.findIndex((n) => n.id === change.id)
+              if (idx !== -1) {
+                updated[idx] = { ...updated[idx], position: change.position }
+              }
+            }
+          }
+          return updated
+        })
+      }}
+      onEdgesChange={() => {}}
+      onNodeClick={handleNodeClick}
+      nodeTypes={nodeTypes}
+      connectionMode={ConnectionMode.Loose}
+      fitView
+      fitViewOptions={{ padding: 0.2 }}
+      minZoom={0.3}
+      maxZoom={2}
+    >
+      <Background color="#e2e8f0" gap={20} />
+      <Controls position="bottom-right" />
+      <MiniMap
+        nodeColor={(node) => {
+          if (node.data?.layer) {
+            return LAYER_COLORS[node.data.layer]?.border || '#6b7280'
+          }
+          return '#6b7280'
+        }}
+        maskColor="rgba(0, 0, 0, 0.1)"
+        style={{ background: '#fff' }}
+      />
+    </ReactFlow>
+  )
+}
+
+// 메인 컴포넌트 (ReactFlowProvider로 감싸기)
+export function ReactFlowDiagram(props: ReactFlowDiagramProps) {
   return (
     <div
       data-testid="react-flow-diagram"
       style={{ width: '100%', height: '600px', background: '#fafafa' }}
     >
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        onNodeClick={handleNodeClick}
-        nodeTypes={nodeTypes}
-        connectionMode={ConnectionMode.Loose}
-        fitView
-        fitViewOptions={{ padding: 0.2 }}
-        minZoom={0.3}
-        maxZoom={2}
-        defaultViewport={{ x: 0, y: 0, zoom: 0.8 }}
-      >
-        <Background color="#e2e8f0" gap={20} />
-        <Controls position="bottom-right" />
-        <MiniMap
-          nodeColor={(node) => {
-            if (node.data?.layer) {
-              return LAYER_COLORS[node.data.layer]?.border || '#6b7280'
-            }
-            return '#6b7280'
-          }}
-          maskColor="rgba(0, 0, 0, 0.1)"
-          style={{ background: '#fff' }}
-        />
-      </ReactFlow>
+      <ReactFlowProvider>
+        <ReactFlowInner {...props} />
+      </ReactFlowProvider>
     </div>
   )
 }
@@ -475,40 +524,44 @@ function generateCausalityView(causalityData: CausalityData[]): {
     const colors = LAYER_COLORS[layer] || LAYER_COLORS.unknown
     let xOffset = 100
 
-    // 레이어 그룹 노드
+    // 레이어 그룹 노드 (기본 노드 타입으로 변경)
     nodes.push({
       id: `layer-${layer}`,
-      type: 'layer',
+      type: 'default',
       position: { x: 20, y: yOffset },
       data: {
-        layer,
-        label: getLayerLabel(layer),
-        fileCount: items.length,
-        functionCount: items.reduce((sum, i) => sum + (i.effects?.length || 0), 0),
-        colors,
+        label: `${getLayerLabel(layer)} (${items.length})`,
+      },
+      style: {
+        background: colors.bg,
+        border: `2px solid ${colors.border}`,
+        borderRadius: 8,
+        padding: 10,
+        fontWeight: 600,
+        color: colors.text,
+        minWidth: 120,
       },
     })
 
-    // 모듈 노드들
+    // 모듈 노드들 (기본 노드 타입으로 변경)
     for (const item of items.slice(0, 4)) {
       const nodeId = `node-${item.path.replace(/[^a-zA-Z0-9]/g, '_')}`
 
       nodes.push({
         id: nodeId,
-        type: 'causality',
+        type: 'default',
         position: { x: xOffset + 200, y: yOffset },
         data: {
-          label: item.fileName,
-          displayName: item.displayName || item.fileName,
-          description: item.description || '',
-          layer,
-          triggers: item.triggers || [],
-          effects: item.effects || [],
-          dataFlow: item.dataFlow || [],
-          inputs: item.inputs || [],
-          outputs: item.outputs || [],
-          isEntry: layer === 'ui',
-          isTerminal: layer === 'data',
+          label: item.displayName || item.fileName,
+        },
+        style: {
+          background: colors.bg,
+          border: `2px solid ${colors.border}`,
+          borderRadius: 8,
+          padding: 10,
+          color: colors.text,
+          fontSize: 12,
+          minWidth: 100,
         },
         sourcePosition: Position.Right,
         targetPosition: Position.Left,
