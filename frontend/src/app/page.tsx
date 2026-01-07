@@ -155,6 +155,17 @@ function HomePageContent() {
             </>
           )}
         </button>
+
+        {/* 버전 정보 */}
+        <div data-testid="version-info" style={{
+          position: 'absolute',
+          bottom: '20px',
+          fontSize: '0.75rem',
+          color: '#64748b',
+          textAlign: 'center',
+        }}>
+          v{process.env.NEXT_PUBLIC_APP_VERSION || '6.2.0'} | Build: {process.env.NEXT_PUBLIC_BUILD_TIME ? new Date(process.env.NEXT_PUBLIC_BUILD_TIME).toLocaleString('ko-KR') : 'dev'}
+        </div>
       </main>
     )
   }
