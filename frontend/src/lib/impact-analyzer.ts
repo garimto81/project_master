@@ -273,7 +273,7 @@ export function generateHumanReadableSummary(
   entryPoints: EntryPointImpact[]
 ): ImpactSummary {
   const directCallers = callers.filter(c => c.impactLevel === 'direct')
-  const indirectCallers = callers.filter(c => c.impactLevel === 'indirect')
+  const _indirectCallers = callers.filter(c => c.impactLevel === 'indirect')
 
   // 영향받는 파일 수
   const affectedFiles = new Set(callers.map(c => c.file))

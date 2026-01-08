@@ -489,9 +489,8 @@ function inferOutcomes(
 /**
  * 흐름 전체 설명 생성
  */
-function generateFlowDescription(trigger: FlowTrigger, outcomes: FlowOutcome[]): string {
+function generateFlowDescription(trigger: FlowTrigger, _outcomes: FlowOutcome[]): string {
   const triggerDesc = trigger.displayLabel
-  const successOutcome = outcomes.find(o => o.type === 'success')
 
   return `사용자가 ${triggerDesc}하면 시스템이 처리를 수행합니다.`
 }

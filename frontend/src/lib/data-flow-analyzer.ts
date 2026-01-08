@@ -467,7 +467,7 @@ function classifyDestination(node: Node, sourceFile: SourceFile): DataDestinatio
  */
 function extractTransformations(
   sources: DataSource[],
-  destinations: DataDestination[]
+  _destinations: DataDestination[]
 ): DataTransformation[] {
   const transformations: DataTransformation[] = []
   let order = 0
