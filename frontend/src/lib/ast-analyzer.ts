@@ -16,7 +16,7 @@ import { Project, SourceFile, Node, SyntaxKind, FunctionDeclaration, ArrowFuncti
 // 타입 정의
 // ============================================================
 
-export type LayerType = 'ui' | 'logic' | 'api' | 'data' | 'lib' | 'unknown'
+export type LayerType = 'ui' | 'logic' | 'server' | 'api' | 'data' | 'lib' | 'unknown'
 
 export interface FunctionInfo {
   id: string
@@ -542,6 +542,7 @@ export function analyzeMultipleFiles(
   const analysisResults: FileAnalysis[] = []
   const byLayer: Record<LayerType, number> = {
     ui: 0,
+    server: 0,
     logic: 0,
     api: 0,
     data: 0,

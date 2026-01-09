@@ -38,6 +38,7 @@ import { DbNode } from './nodes/DbNode'
 import { CausalityNode } from './nodes/CausalityNode'
 import type { FileAnalysis } from '@/lib/ast-analyzer'
 import type { CallGraphResult } from '@/lib/call-graph-analyzer'
+import { inferLayerFromPath } from '@/lib/layer-classifier'
 
 // ============================================================
 // 타입 정의
@@ -690,17 +691,6 @@ function getLayerConnectionLabel(from: string, to: string): string {
   if (from === 'logic' && to === 'api') return 'API 호출'
   if (from === 'api' && to === 'data') return 'DB 접근'
   return ''
-}
-
-function inferLayerFromPath(path: string): string {
-  const lowerPath = path.toLowerCase()
-
-  if (lowerPath.includes('/api/') && lowerPath.includes('route.')) return 'api'
-  if (lowerPath.includes('/components/') || lowerPath.includes('/pages/')) return 'ui'
-  if (lowerPath.includes('/hooks/') || lowerPath.includes('/services/')) return 'logic'
-  if (lowerPath.includes('/lib/') || lowerPath.includes('/utils/')) return 'lib'
-
-  return 'unknown'
 }
 
 export default ReactFlowDiagram

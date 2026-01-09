@@ -10,31 +10,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getGitHubTokenFromSession } from '@/lib/auth'
 import { treeCache, GitHubTreeItem } from '@/lib/analysis-cache'
+import { inferLayerQuick } from '@/lib/layer-classifier'
 
 interface GitHubTreeResponse {
   tree: GitHubTreeItem[]
   truncated?: boolean
-}
-
-// 파일 경로에서 레이어 추론 (빠른 버전)
-function inferLayerQuick(path: string): string {
-  const lowerPath = path.toLowerCase()
-
-  if (lowerPath.includes('component') || lowerPath.includes('page') ||
-      lowerPath.match(/\.(tsx|jsx)$/)) {
-    return 'ui'
-  }
-
-  if (lowerPath.includes('api') || lowerPath.includes('route')) {
-    return 'server'
-  }
-
-  if (lowerPath.includes('model') || lowerPath.includes('store') ||
-      lowerPath.includes('db')) {
-    return 'data'
-  }
-
-  return 'logic'
 }
 
 export async function POST(request: NextRequest) {

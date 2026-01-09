@@ -17,6 +17,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getGitHubTokenFromSession } from '@/lib/auth'
 import { analysisCache, treeCache, issuesCache, GitHubTreeItem } from '@/lib/analysis-cache'
+import { inferLayerFromPath } from '@/lib/layer-classifier'
 
 interface Layer {
   name: string
@@ -93,39 +94,6 @@ interface AnalyzeResponse {
   summary: string
 }
 
-// 파일 경로에서 레이어 추론
-function inferLayer(path: string): string {
-  const lowerPath = path.toLowerCase()
-
-  // UI 레이어
-  if (lowerPath.includes('component') || lowerPath.includes('page') ||
-      lowerPath.includes('view') || lowerPath.includes('ui') ||
-      lowerPath.match(/\.(tsx|jsx)$/)) {
-    return 'ui'
-  }
-
-  // API/Server 레이어
-  if (lowerPath.includes('api') || lowerPath.includes('route') ||
-      lowerPath.includes('server') || lowerPath.includes('endpoint')) {
-    return 'server'
-  }
-
-  // Data 레이어
-  if (lowerPath.includes('model') || lowerPath.includes('schema') ||
-      lowerPath.includes('database') || lowerPath.includes('db') ||
-      lowerPath.includes('store') || lowerPath.includes('state')) {
-    return 'data'
-  }
-
-  // Logic 레이어 (기본)
-  if (lowerPath.includes('service') || lowerPath.includes('util') ||
-      lowerPath.includes('lib') || lowerPath.includes('helper') ||
-      lowerPath.includes('hook')) {
-    return 'logic'
-  }
-
-  return 'logic' // 기본값
-}
 
 // 코드에서 위험 패턴 감지
 function detectRiskPatterns(content: string, path: string): RiskPoint[] {
@@ -560,7 +528,7 @@ async function analyzeCodebase(request: NextRequest, params: { repo?: string; pa
     }
 
     for (const file of codeFiles) {
-      const layer = inferLayer(file.path)
+      const layer = inferLayerFromPath(file.path)
       const fileName = file.path.split('/').pop()?.replace(/\.(tsx?|jsx?|py)$/, '') || ''
       if (!layerFiles[layer].includes(fileName)) {
         layerFiles[layer].push(fileName)
@@ -712,8 +680,8 @@ async function analyzeCodebase(request: NextRequest, params: { repo?: string; pa
       // node_modules는 제외
       if (imp.to.includes('node_modules')) continue
 
-      const fromLayer = inferLayer(imp.from)
-      const toLayer = inferLayer(imp.to)
+      const fromLayer = inferLayerFromPath(imp.from)
+      const toLayer = inferLayerFromPath(imp.to)
       const connKey = `${fromLayer}-${toLayer}`
 
       if (!addedConnections.has(connKey) && fromLayer !== toLayer) {
@@ -825,8 +793,8 @@ async function analyzeCodebase(request: NextRequest, params: { repo?: string; pa
     // 순환 의존성 연결선 (빨간 점선)
     for (const cd of circularDependencies.slice(0, 3)) {
       if (cd.cycle.length >= 2) {
-        const from = inferLayer(cd.cycle[0])
-        const to = inferLayer(cd.cycle[1])
+        const from = inferLayerFromPath(cd.cycle[0])
+        const to = inferLayerFromPath(cd.cycle[1])
         if (from !== to) {
           mermaidLines.push(`  ${from} <-.->|"⚠️ 순환"| ${to}`)
         }

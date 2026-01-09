@@ -18,6 +18,7 @@ import {
   createMultiFileQuery,
 } from '@/lib/github-graphql'
 import { analysisCache } from '@/lib/analysis-cache'
+import { inferLayerFromPath } from '@/lib/layer-classifier'
 
 interface Layer {
   name: string
@@ -27,27 +28,6 @@ interface Layer {
 }
 
 // 파일 경로에서 레이어 추론
-function inferLayer(path: string): string {
-  const lowerPath = path.toLowerCase()
-
-  if (lowerPath.includes('component') || lowerPath.includes('page') ||
-      lowerPath.includes('view') || lowerPath.match(/\.(tsx|jsx)$/)) {
-    return 'ui'
-  }
-
-  if (lowerPath.includes('api') || lowerPath.includes('route') ||
-      lowerPath.includes('server')) {
-    return 'server'
-  }
-
-  if (lowerPath.includes('model') || lowerPath.includes('store') ||
-      lowerPath.includes('database') || lowerPath.includes('db')) {
-    return 'data'
-  }
-
-  return 'logic'
-}
-
 // import 문 추출
 function extractImports(content: string, filePath: string): Array<{ from: string; to: string; imports: string[] }> {
   const imports: Array<{ from: string; to: string; imports: string[] }> = []
@@ -126,7 +106,7 @@ export async function POST(request: NextRequest) {
     }
 
     for (const file of codeFiles) {
-      const layer = inferLayer(file.path)
+      const layer = inferLayerFromPath(file.path)
       const fileName = file.path.split('/').pop()?.replace(/\.(tsx?|jsx?)$/, '') || ''
       if (!layerFiles[layer].includes(fileName)) {
         layerFiles[layer].push(fileName)

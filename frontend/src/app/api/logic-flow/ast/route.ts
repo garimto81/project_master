@@ -17,6 +17,7 @@ import {
   type AstAnalysisResult,
   type LayerType,
 } from '@/lib/ast-analyzer'
+import { inferLayerFromPath } from '@/lib/layer-classifier'
 
 // ============================================================
 // 타입 정의
@@ -60,6 +61,7 @@ const DEPTH_CONFIG = {
 const LAYER_COLORS: Record<LayerType, { fill: string; stroke: string; text: string }> = {
   ui: { fill: '#dbeafe', stroke: '#3b82f6', text: '#1e40af' },
   logic: { fill: '#dcfce7', stroke: '#22c55e', text: '#166534' },
+  server: { fill: '#fef3c7', stroke: '#f59e0b', text: '#92400e' },
   api: { fill: '#ffedd5', stroke: '#f97316', text: '#9a3412' },
   data: { fill: '#e0e7ff', stroke: '#6366f1', text: '#3730a3' },
   lib: { fill: '#fef3c7', stroke: '#f59e0b', text: '#92400e' },
@@ -69,6 +71,7 @@ const LAYER_COLORS: Record<LayerType, { fill: string; stroke: string; text: stri
 const LAYER_NAMES: Record<LayerType, string> = {
   ui: '화면 (UI)',
   logic: '처리 (Logic)',
+  server: '서버 (Server)',
   api: '서버 (API)',
   data: '데이터 (Data)',
   lib: '유틸 (Lib)',
@@ -292,6 +295,7 @@ function analyzeByPathOnly(files: GitHubTreeItem[]): AstAnalysisResult {
   const byLayer: Record<LayerType, number> = {
     ui: 0,
     logic: 0,
+    server: 0,
     api: 0,
     data: 0,
     lib: 0,
@@ -327,45 +331,6 @@ function analyzeByPathOnly(files: GitHubTreeItem[]): AstAnalysisResult {
   }
 }
 
-function inferLayerFromPath(path: string): LayerType {
-  const lowerPath = path.toLowerCase()
-
-  if (lowerPath.includes('/api/') && lowerPath.includes('route.')) {
-    return 'api'
-  }
-
-  if (
-    lowerPath.includes('/components/') ||
-    lowerPath.includes('/pages/') ||
-    lowerPath.includes('/app/') && !lowerPath.includes('/api/')
-  ) {
-    return 'ui'
-  }
-
-  if (
-    lowerPath.includes('/hooks/') ||
-    lowerPath.includes('/services/') ||
-    lowerPath.includes('/stores/')
-  ) {
-    return 'logic'
-  }
-
-  if (lowerPath.includes('/lib/') || lowerPath.includes('/utils/')) {
-    return 'lib'
-  }
-
-  if (lowerPath.includes('/db/') || lowerPath.includes('/database/')) {
-    return 'data'
-  }
-
-  // 파일 확장자로 추론
-  if (lowerPath.endsWith('.tsx') || lowerPath.endsWith('.jsx')) {
-    return 'ui'
-  }
-
-  return 'unknown'
-}
-
 function generateMermaidDiagram(files: FileAnalysis[]): string {
   const lines: string[] = ['flowchart TB']
 
@@ -373,6 +338,7 @@ function generateMermaidDiagram(files: FileAnalysis[]): string {
   const byLayer: Record<LayerType, FileAnalysis[]> = {
     ui: [],
     logic: [],
+    server: [],
     api: [],
     data: [],
     lib: [],

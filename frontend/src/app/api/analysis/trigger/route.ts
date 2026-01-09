@@ -182,7 +182,7 @@ async function analyzeInBackground(
           totalFunctions: 0,
           totalClasses: 0,
           analysisTimeMs: 0,
-          byLayer: { ui: 0, logic: 0, api: 0, data: 0, lib: 0, unknown: 0 },
+          byLayer: { ui: 0, logic: 0, server: 0, api: 0, data: 0, lib: 0, unknown: 0 },
         },
       }
       await setCachedAnalysis(userId, repoFullName, emptyResult)
