@@ -1,69 +1,25 @@
 /**
  * GitCommand Center API Client
+ * 타입은 @/lib/types에서 통합 관리
  */
+
+import type {
+  AIModel,
+  AIResolveRequest,
+  AIResolveResponse,
+  Repository,
+  RepositoryDetail,
+  CLIStatus,
+} from './types'
+
+// 타입 re-export (하위 호환성)
+export type { AIModel, AIResolveRequest, AIResolveResponse, Repository, RepositoryDetail, CLIStatus }
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
-export interface AIModel {
-  id: string;
-  name: string;
-  description: string;
-  available: boolean;
-}
-
-export interface Repository {
-  id: number;
-  name: string;
-  full_name: string;
-  description: string | null;
-  language: string | null;
-  open_issues_count: number;
-  stargazers_count: number;
-  updated_at: string;
-}
-
-export interface RepositoryDetail extends Repository {
-  html_url: string;
-  clone_url: string;
-  default_branch: string;
-  archived: boolean;
-  forks_count: number;
-  size: number;
-  contributors_count: number;
-  branches: string[];
-  recent_commits: Array<{
-    sha: string;
-    message: string;
-    author: string;
-    date: string;
-  }>;
-  languages: Record<string, number>;
-}
-
-export interface CLIStatus {
-  claude: boolean;
-  codex: boolean;
-  gemini: boolean;
-  qwen: boolean;
-}
-
-export interface AIResolveRequest {
-  model: string;
-  issue_id: number;
-  issue_title: string;
-  prompt?: string;
-}
-
-export interface AIResolveResponse {
-  success: boolean;
-  model_used: string;
-  code: string;
-  output: string;
-  message: string;
-}
-
 /**
  * API 헬스 체크
+ * @deprecated FastAPI 레거시 - 새 기능은 Next.js API Routes 사용
  */
 export async function checkHealth(): Promise<{ status: string; version: string }> {
   const response = await fetch(`${API_BASE_URL}/health`);
@@ -73,6 +29,7 @@ export async function checkHealth(): Promise<{ status: string; version: string }
 
 /**
  * CLI 설치 상태 확인
+ * @deprecated FastAPI 레거시 - 새 기능은 Next.js API Routes 사용
  */
 export async function getCLIStatus(): Promise<CLIStatus> {
   const response = await fetch(`${API_BASE_URL}/api/cli/status`);
@@ -92,6 +49,7 @@ export async function getAvailableModels(): Promise<AIModel[]> {
 
 /**
  * AI로 이슈 해결
+ * @deprecated FastAPI 레거시 - 새 기능은 /api/ai/resolve Route 사용
  */
 export async function resolveIssueWithAI(request: AIResolveRequest): Promise<AIResolveResponse> {
   const controller = new AbortController();
@@ -123,6 +81,7 @@ export async function resolveIssueWithAI(request: AIResolveRequest): Promise<AIR
 
 /**
  * AI로 이슈 해결 (폴백 지원)
+ * @deprecated FastAPI 레거시 - 새 기능은 /api/ai/resolve Route 사용
  */
 export async function resolveIssueWithFallback(request: AIResolveRequest): Promise<AIResolveResponse> {
   const response = await fetch(`${API_BASE_URL}/api/ai/resolve-with-fallback`, {
