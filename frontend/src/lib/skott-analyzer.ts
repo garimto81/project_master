@@ -13,6 +13,7 @@
  */
 
 import { LAYER_COLORS, VISUALIZATION_LIMITS } from './colors'
+import { inferLayerFromPath } from './layer-classifier'
 
 export interface SkottAnalysisResult {
   // 의존성 그래프
@@ -252,48 +253,6 @@ function generateMermaidFromGraph(
   }
 
   return lines.join('\n')
-}
-
-/**
- * 파일 경로에서 레이어 추론
- */
-function inferLayerFromPath(path: string): string {
-  const lowerPath = path.toLowerCase()
-
-  if (
-    lowerPath.includes('component') ||
-    lowerPath.includes('page') ||
-    lowerPath.includes('app/') ||
-    lowerPath.match(/\.(tsx|jsx)$/)
-  ) {
-    return 'ui'
-  }
-
-  if (
-    lowerPath.includes('api/') ||
-    lowerPath.includes('route') ||
-    lowerPath.includes('server')
-  ) {
-    return 'api'
-  }
-
-  if (
-    lowerPath.includes('lib/') ||
-    lowerPath.includes('util') ||
-    lowerPath.includes('helper')
-  ) {
-    return 'lib'
-  }
-
-  if (
-    lowerPath.includes('hook') ||
-    lowerPath.includes('service') ||
-    lowerPath.includes('store')
-  ) {
-    return 'logic'
-  }
-
-  return 'other'
 }
 
 /**
