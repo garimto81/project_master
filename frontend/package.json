@@ -11,7 +11,10 @@
     "start": "next start",
     "lint": "next lint",
     "test:e2e": "playwright test",
-    "test:e2e:ui": "playwright test --ui"
+    "test:e2e:ui": "playwright test --ui",
+    "test": "vitest",
+    "test:unit": "vitest run",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@supabase/ssr": "^0.8.0",
@@ -30,10 +33,15 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.40.0",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.1",
     "@types/node": "^20",
     "@types/react": "^18",
+    "@vitejs/plugin-react": "^5.1.2",
     "eslint": "^8.57.1",
     "eslint-config-next": "^14.2.35",
-    "typescript": "^5"
+    "jsdom": "^27.4.0",
+    "typescript": "^5",
+    "vitest": "^4.0.16"
   }
 }
