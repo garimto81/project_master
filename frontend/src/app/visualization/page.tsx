@@ -49,6 +49,11 @@ const ErrorTrace = dynamic(
   { ssr: false }
 )
 
+const BehaviorVisualization = dynamic(
+  () => import('@/components/visualization/BehaviorVisualization'),
+  { ssr: false }
+)
+
 type ViewLevel = 'repos' | 'big-picture' | 'layer-detail' | 'module' | 'function'
 
 interface Repository {
@@ -165,6 +170,9 @@ function VisualizationContent() {
     stats: { totalFunctions: number; totalCalls: number; totalApiCalls: number }
   } | null>(null)
   const [showCallGraph, setShowCallGraph] = useState(false)
+
+  // PRD-0008: 행동 중심 시각화 모드
+  const [showBehaviorView, setShowBehaviorView] = useState(false)
 
   // Phase 1: 분석 진행률 상태 (이슈 #42, #48)
   const [analysisStage, setAnalysisStage] = useState<AnalysisStage>('fetching')
@@ -625,6 +633,28 @@ function VisualizationContent() {
             </h1>
           </div>
 
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+            {/* PRD-0008: 행동 중심 모드 토글 */}
+            {selectedRepo && viewLevel !== 'repos' && (
+              <button
+                onClick={() => setShowBehaviorView(!showBehaviorView)}
+                style={{
+                  padding: '8px 16px',
+                  background: showBehaviorView ? '#3b82f6' : '#f1f5f9',
+                  color: showBehaviorView ? '#fff' : '#64748b',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
+              >
+                🎯 {showBehaviorView ? '구조 뷰' : '행동 뷰'}
+              </button>
+            )}
+
           {viewLevel !== 'repos' && (
             <button
               onClick={handleBack}
@@ -641,6 +671,7 @@ function VisualizationContent() {
               ← 뒤로
             </button>
           )}
+          </div>
         </div>
 
         {/* 브레드크럼 */}
@@ -680,6 +711,16 @@ function VisualizationContent() {
 
       {/* 메인 콘텐츠 */}
       <div style={{ padding: '24px', maxWidth: '1400px', margin: '0 auto' }}>
+        {/* PRD-0008: 행동 중심 시각화 모드 */}
+        {showBehaviorView && selectedRepo && (
+          <div style={{ marginBottom: '24px' }}>
+            <BehaviorVisualization
+              repo={selectedRepo}
+              onClose={() => setShowBehaviorView(false)}
+            />
+          </div>
+        )}
+
         {/* 에러 표시 + 로그인 버튼 */}
         {error && (
           <div style={{
