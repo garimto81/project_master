@@ -19,6 +19,11 @@ const JourneyView = dynamic(
   { ssr: false }
 )
 
+const ImpactView = dynamic(
+  () => import('@/components/visualization/ImpactView'),
+  { ssr: false }
+)
+
 // ============================================================
 // 타입 정의
 // ============================================================
@@ -58,7 +63,7 @@ const VIEW_OPTIONS: ViewOption[] = [
     icon: '⚠️',
     description: '이걸 바꾸면 뭐가 깨지는가?',
     priority: 'P1',
-    available: false, // Phase 2에서 구현
+    available: true, // Phase 2 구현 완료
   },
   {
     id: 'dataflow',
@@ -206,16 +211,7 @@ export default function BehaviorVisualization({ repo, onClose }: BehaviorVisuali
         )}
 
         {activeView === 'impact' && (
-          <ComingSoonView
-            icon="⚠️"
-            title="영향 분석"
-            description="이 기능은 Phase 2에서 구현될 예정입니다."
-            features={[
-              '역방향 BFS로 호출자 추적',
-              '삭제 시 영향받는 기능 목록',
-              '위험도 표시 (High/Medium/Low)',
-            ]}
-          />
+          <ImpactView repo={repo} />
         )}
 
         {activeView === 'dataflow' && (
