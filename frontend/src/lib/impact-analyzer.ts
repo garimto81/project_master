@@ -58,7 +58,7 @@ export function analyzeImpact(
   const summary = generateHumanReadableSummary(target, callers, affectedEntryPoints)
 
   // 5. 사용자 기능 매핑 (PRD-0008)
-  const affectedFiles = [target.file, ...callers.map(c => c.file)]
+  const affectedFiles = [target.file, ...callers.map(c => c.file)].filter((f): f is string => !!f)
   const userFeatures = mapToUserFeatures(affectedFiles)
 
   // 6. 시각화 데이터 생성

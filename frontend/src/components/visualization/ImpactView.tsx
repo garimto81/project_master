@@ -139,16 +139,37 @@ export default function ImpactView({ repo, onFunctionClick }: ImpactViewProps) {
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const formatResult = (raw: any): ImpactResult => ({
-      target: raw.target || { id: 'target', name: targetFunction, displayName: targetFunction },
-      directCallers: raw.directCallers || [],
-      indirectCallers: raw.indirectCallers || [],
-      userFeatures: raw.userFeatures || [],
-      impact: raw.impact || { severity: 'low', type: 'direct', description: '', callers: [] },
-      riskLevel: raw.riskLevel || 'low',
-      summary: raw.summary || '',
-      mermaid: raw.mermaid || generateMermaid(targetFunction, raw.directCallers || [], raw.indirectCallers || []),
-    })
+    const formatResult = (raw: any): ImpactResult => {
+      // API 응답 구조: affectedCallers (ImpactNode[]), summary (ImpactSummary 객체)
+      // 클라이언트 구조: directCallers/indirectCallers, summary (문자열)
+      const allCallers = raw.affectedCallers || []
+      const direct = allCallers.filter((c: Caller & { impactLevel?: string }) => c.impactLevel === 'direct' || c.depth === 1)
+      const indirect = allCallers.filter((c: Caller & { impactLevel?: string }) => c.impactLevel === 'indirect' || c.depth > 1)
+
+      // summary가 객체면 humanReadableMessage 추출, 문자열이면 그대로 사용
+      const summaryText = typeof raw.summary === 'object' && raw.summary !== null
+        ? raw.summary.humanReadableMessage || ''
+        : raw.summary || ''
+
+      // riskLevel: summary.severity 또는 직접 전달된 값
+      const riskLevel = (typeof raw.summary === 'object' && raw.summary?.severity)
+        ? (raw.summary.severity === 'critical' ? 'high' : raw.summary.severity)
+        : (raw.riskLevel || 'low')
+
+      // mermaid: visualizationData.mermaidCode 또는 직접 전달된 값
+      const mermaidCode = raw.visualizationData?.mermaidCode || raw.mermaid || generateMermaid(targetFunction, direct, indirect)
+
+      return {
+        target: raw.target || { id: 'target', name: targetFunction, displayName: targetFunction },
+        directCallers: direct,
+        indirectCallers: indirect,
+        userFeatures: raw.userFeatures || [],
+        impact: raw.impact || { severity: riskLevel, type: 'direct', description: '', callers: [...direct, ...indirect] },
+        riskLevel,
+        summary: summaryText,
+        mermaid: mermaidCode,
+      }
+    }
 
     if (!targetFunction.trim()) {
       setError('함수명을 입력해주세요.')
