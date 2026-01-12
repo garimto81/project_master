@@ -85,6 +85,7 @@ export interface ImpactAnalysisResult {
   target: ImpactTarget
   affectedCallers: ImpactNode[]
   affectedEntryPoints: EntryPointImpact[]
+  userFeatures: string[]  // PRD-0008: 영향받는 사용자 기능 목록
   summary: ImpactSummary
   visualizationData: ImpactVisualization
 }

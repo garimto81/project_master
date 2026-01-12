@@ -18,6 +18,7 @@ import type {
 } from './types/sequence'
 import type { CallGraphResult, FunctionNode, CallEdge } from './call-graph-analyzer'
 import { getFriendlyLabel, getFunctionIcon } from './function-labels'
+import { mapToUserFeatures } from './impact/feature-mapper'
 
 // ============================================================
 // 메인 분석 함수
@@ -56,13 +57,18 @@ export function analyzeImpact(
   // 4. 비개발자용 요약 생성
   const summary = generateHumanReadableSummary(target, callers, affectedEntryPoints)
 
-  // 5. 시각화 데이터 생성
+  // 5. 사용자 기능 매핑 (PRD-0008)
+  const affectedFiles = [target.file, ...callers.map(c => c.file)]
+  const userFeatures = mapToUserFeatures(affectedFiles)
+
+  // 6. 시각화 데이터 생성
   const visualizationData = generateVisualization(target, callers, affectedEntryPoints)
 
   return {
     target,
     affectedCallers: callers,
     affectedEntryPoints,
+    userFeatures,
     summary,
     visualizationData,
   }

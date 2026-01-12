@@ -48,6 +48,7 @@ interface ImpactResult {
   }
   directCallers: Caller[]
   indirectCallers: Caller[]
+  userFeatures: string[]  // PRD-0008: 영향받는 사용자 기능
   impact: Impact
   riskLevel: 'high' | 'medium' | 'low'
   summary: string
@@ -124,6 +125,7 @@ export default function ImpactView({ repo, onFunctionClick }: ImpactViewProps) {
         target: { id: 'target', name: funcName, displayName: translateFunctionName(funcName), file: 'src/lib/' + funcName + '.ts' },
         directCallers,
         indirectCallers,
+        userFeatures: ['로그인', '인증'],
         impact: {
           severity: directCallers.length > 2 ? 'high' : directCallers.length > 0 ? 'medium' : 'low',
           type: 'direct',
@@ -141,6 +143,7 @@ export default function ImpactView({ repo, onFunctionClick }: ImpactViewProps) {
       target: raw.target || { id: 'target', name: targetFunction, displayName: targetFunction },
       directCallers: raw.directCallers || [],
       indirectCallers: raw.indirectCallers || [],
+      userFeatures: raw.userFeatures || [],
       impact: raw.impact || { severity: 'low', type: 'direct', description: '', callers: [] },
       riskLevel: raw.riskLevel || 'low',
       summary: raw.summary || '',
@@ -520,6 +523,31 @@ export default function ImpactView({ repo, onFunctionClick }: ImpactViewProps) {
                   ))}
                 </div>
               </>
+            )}
+            {/* PRD-0008: 영향받는 사용자 기능 */}
+            {impactResult.userFeatures && impactResult.userFeatures.length > 0 && (
+              <div style={{ marginTop: '20px' }}>
+                <h5 style={{ margin: '0 0 12px', fontSize: '14px', color: '#64748b' }}>
+                  영향받는 기능 ({impactResult.userFeatures.length}개)
+                </h5>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                  {impactResult.userFeatures.map((feature, idx) => (
+                    <span
+                      key={idx}
+                      style={{
+                        padding: '6px 12px',
+                        background: RISK_COLORS[impactResult.riskLevel].badge,
+                        color: RISK_COLORS[impactResult.riskLevel].text,
+                        borderRadius: '16px',
+                        fontSize: '13px',
+                        fontWeight: 500,
+                      }}
+                    >
+                      {feature}
+                    </span>
+                  ))}
+                </div>
+              </div>
             )}
           </div>
 
